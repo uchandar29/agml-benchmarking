@@ -22,4 +22,4 @@ export TRANSFORMERS_OFFLINE=1
 python -m ag_vlm.run \
   --datasets bean_disease_uganda \
   --model Qwen/Qwen2.5-VL-7B-Instruct \
-  --output-dir /group/jmearles/$USER/job/agvlm_out/$SLURM_JOB_ID
+  --output-dir /group/jmearlesgrp/$USER/job/agvlm_out/$SLURM_JOB_ID
