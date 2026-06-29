@@ -12,10 +12,12 @@
 #SBATCH --error=logs/agvlm_%j.err
 
 module load conda
+module load cuda/12
+module load gcc/13
 conda activate agvlm
 
-export HF_HOME=/group_or_scratch/$USER/hf
-export AGML_DATA_DIR=/group_or_scratch/$USER/agml
+export HF_HOME=/group/jmearlesgrp/$USER/hf
+export AGML_DATA_DIR=/group/jmearlesgrp/$USER/agml
 export HF_HUB_OFFLINE=1            # only if compute nodes are offline
 export TRANSFORMERS_OFFLINE=1
 
