@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=agvlm
-#SBATCH --partition=gpu-a100-h   
+#SBATCH --partition=gpu-6000_ada-h  
 #SBATCH --account=jmearlesgrp         
 #SBATCH --gres=gpu:1               
 #SBATCH --nodes=1
