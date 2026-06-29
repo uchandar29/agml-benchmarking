@@ -1,0 +1,34 @@
+# Default configuration for the Ag-VLM pipeline.
+# Everything here has a sensible default; the CLI only carries the few
+# arguments that change per run (see ag_vlm/run.py).
+
+# ---- vLLM engine settings ----
+engine:
+  tensor_parallel_size: 1        # GPUs to shard the model across (bump for 70B+ models)
+  max_model_len: 8192            # max tokens per request (prompt + generation)
+  dtype: "auto"                  # let vLLM pick (bf16 on modern GPUs)
+  gpu_memory_utilization: 0.90   # fraction of VRAM vLLM may claim
+  max_images_per_prompt: 1       # one image per request in this pipeline
+  image_max_pixels: 1048576      # cap image resolution to control memory (1024*1024)
+
+# ---- sampling for generation ----
+sampling:
+  temperature: 0.2               # low: we want stable, faithful output
+  top_p: 0.9
+  max_tokens: 1024
+  n_samples_per_image: 1         # >1 reserved for future DPO multi-rationale mining
+
+# ---- batching ----
+batching:
+  batch_size: 64                 # records flushed to disk per batch
+
+# ---- Stage B evidence schema ----
+# These field names drive the rationalize-pass JSON schema. Tune per task type
+# (disease vs crop-type vs weed) without touching code elsewhere.
+evidence_fields:
+  - "color"
+  - "lesion_or_marking_pattern"
+  - "margin_or_edge"
+  - "shape_or_morphology"
+  - "texture"
+  - "distribution_on_plant"

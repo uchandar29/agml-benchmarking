@@ -1,0 +1,6 @@
+# Pin on FARM once a working CUDA/torch combo is confirmed.
+vllm>=0.6.3
+agml>=0.7.0
+pillow>=10.0.0
+pyyaml>=6.0
+numpy>=1.24
