@@ -70,7 +70,7 @@ class ExactDuplicateMetric(BaseMetric):
                 return "test"
             return "unknown"
 
-        # ── Hash every image ──────────────────────────────────────────────────
+        # ---------------------------- Hash every image ----------------------------
         # hash → list of original indices that produced that hash
         hash_to_orig: Dict[str, list] = defaultdict(list)
 
@@ -84,7 +84,7 @@ class ExactDuplicateMetric(BaseMetric):
                 digest = hashlib.md5(img.tobytes()).hexdigest()
                 hash_to_orig[digest].append(orig_idx)
 
-        # ── Analyse results ───────────────────────────────────────────────────
+        # ---------------------------- Analyse results ----------------------------
         dup_groups = {
             h: idxs
             for h, idxs in hash_to_orig.items()

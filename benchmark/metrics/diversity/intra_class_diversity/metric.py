@@ -28,7 +28,7 @@ L2 distance on unit-norm vectors ranges [0, 2]:
 Output keys
 -----------
 embed_model          : str
-per_class_diversity  : {class_name: float}   — mean L2 to centroid
+per_class_diversity  : {class_name: float}    — mean L2 to centroid
 mean_diversity       : float                  — macro-average across classes
 min_diversity_class  : str                    — narrowest class (flag for review)
 max_diversity_class  : str                    — widest class

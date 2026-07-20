@@ -3,7 +3,7 @@
   "train_ratio": 0.70,
   "val_ratio": 0.15,
 
-  "output_dir": "results",
+  "output_dir": "/group/jmearlesgrp/uchandar/dataset-benchmarking/output",
 
   "embed_model": "facebook/dinov2-base",
   "embed_batch_size": 64,
