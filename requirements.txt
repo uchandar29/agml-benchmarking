@@ -1,5 +1,5 @@
 # Pin on FARM once a working CUDA/torch combo is confirmed.
-vllm>=0.6.3
+vllm>=0.11.0
 agml>=0.7.0
 pillow>=10.0.0
 pyyaml>=6.0

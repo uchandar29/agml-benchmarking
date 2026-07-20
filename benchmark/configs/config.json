@@ -1,0 +1,16 @@
+{
+  "split_seed": 42,
+  "train_ratio": 0.70,
+  "val_ratio": 0.15,
+
+  "output_dir": "results",
+
+  "embed_model": "facebook/dinov2-base",
+  "embed_batch_size": 64,
+  "near_dup_threshold": 0.98,
+  "faiss_ivf_threshold": 100000,
+  "max_silhouette_samples": 10000,
+
+  "backbone": "resnet18",
+  "cv_folds": 5
+}

@@ -7,6 +7,7 @@ from typing import Dict, List, Optional
 
 def BuildPredictPrompt(classList: List[str]) -> str:
     """Build the Stage A text prompt asking the model to predict the class."""
+    
     classText: str = ", ".join(classList)
     return (
         "You are an expert agronomist. Look only at the image. From the following "
@@ -20,6 +21,7 @@ def BuildPredictPrompt(classList: List[str]) -> str:
 
 def BuildPredictSchema(classList: List[str]) -> Dict:
     """Build the JSON schema constraining the Stage A output."""
+    
     return {
         "type": "object",
         "properties": {
@@ -38,6 +40,7 @@ def BuildRationalizePrompt(
     confusableClass: Optional[str] = None,
 ) -> str:
     """Build the Stage B text prompt asking the model to justify the given label."""
+    
     basePrompt: str = (
         "You are an expert agronomist. This image is labeled "
         f"{trueClass}. Examine the image and explain, using only visible evidence, "
@@ -45,6 +48,7 @@ def BuildRationalizePrompt(
         "Return JSON with the fields below. If a field is not visible, set it to "
         '"not_visible".'
     )
+
     if contrastive and confusableClass is not None:
         basePrompt += (
             f"\nAlso explain why this is {trueClass} and not {confusableClass}."
@@ -54,6 +58,7 @@ def BuildRationalizePrompt(
 
 def BuildRationalizeSchema(evidenceFields: List[str]) -> Dict:
     """Build the JSON schema for Stage B, using configurable evidence fields."""
+    
     evidenceProperties: Dict = {field: {"type": "string"} for field in evidenceFields}
     return {
         "type": "object",

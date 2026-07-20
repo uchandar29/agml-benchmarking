@@ -11,9 +11,8 @@
 #SBATCH --output=logs/agvlm_%j.out
 #SBATCH --error=logs/agvlm_%j.err
 
-module load conda
 module load cuda/12
-module load gcc/13
+module load conda
 conda activate agvlm
 
 export HF_HOME=/group/jmearlesgrp/$USER/hf

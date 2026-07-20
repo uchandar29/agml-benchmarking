@@ -18,6 +18,7 @@ from ag_vlm.engine import VlmEngine
 
 def ParseArgs() -> argparse.Namespace:
     """Parse the minimal CLI (3 required, 3 optional) described in the spec."""
+    
     parser: argparse.ArgumentParser = argparse.ArgumentParser(description="Ag-VLM reasoning pipeline")
     parser.add_argument("--datasets", required=True, help="Comma-separated AgML dataset names")
     parser.add_argument("--model", required=True, help="HF VLM model name for vLLM")
@@ -30,6 +31,7 @@ def ParseArgs() -> argparse.Namespace:
 
 def LoadConfig() -> Dict:
     """Load config.yaml that sits next to this module."""
+    
     configPath: str = os.path.join(os.path.dirname(__file__), "config.yaml")
     with open(configPath, "r", encoding="utf-8") as handle:
         config: Dict = yaml.safe_load(handle)
@@ -43,6 +45,7 @@ def RunPredictPass(
     config: Dict,
 ) -> tuple[List[Optional[Dict]], int]:
     """Run Stage A over a batch; return parsed predictions and a malformed count."""
+    
     promptText: str = Prompts.BuildPredictPrompt(classList)
     schema: Dict = Prompts.BuildPredictSchema(classList)
     requests: List[Dict] = [engine.BuildRequest(promptText, sample.image) for sample in samples]
@@ -59,6 +62,7 @@ def RunRationalizePass(
     confusableLookup: Dict[str, Optional[str]],
 ) -> List[Optional[Dict]]:
     """Run Stage B over a batch; each request uses that sample's true label."""
+    
     schema: Dict = Prompts.BuildRationalizeSchema(config["evidence_fields"])
     requests: List[Dict] = []
     for sample in samples:
@@ -76,6 +80,7 @@ def BuildRecord(
     runPredict: bool,
 ) -> Dict:
     """Assemble one output record combining both passes for a single image."""
+    
     predictedClass: Optional[str] = prediction.get("predicted_class") if prediction else None
     confidence: Optional[float] = prediction.get("confidence") if prediction else None
     predictReasoning: Optional[List[str]] = prediction.get("visual_evidence") if prediction else None
@@ -96,6 +101,7 @@ def BuildRecord(
 
 def ProcessDataset(engine: VlmEngine, datasetName: str, args: argparse.Namespace, config: Dict) -> None:
     """Run the full two-pass pipeline for one dataset and write all outputs."""
+    
     datasetDir: str = os.path.join(args.output_dir, datasetName)
     Io.EnsureDir(datasetDir)
     recordsPath: str = os.path.join(datasetDir, "records.jsonl")
@@ -117,6 +123,7 @@ def ProcessDataset(engine: VlmEngine, datasetName: str, args: argparse.Namespace
 
     def FlushBatch(batch: List[ImageSample]) -> int:
         """Run both passes on a batch, write the records, return malformed count."""
+        
         if not batch:
             return 0
         predictions: List[Optional[Dict]] = [None] * len(batch)

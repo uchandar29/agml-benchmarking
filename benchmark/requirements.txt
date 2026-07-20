@@ -1,0 +1,19 @@
+# ── Phase 1 ───────────────────────────────────────────────────────────────────
+# datasets >= 2.14  →  stratify_by_column in train_test_split
+# Pillow   >= 9.0   →  stable Image.size header-only reads
+datasets>=2.14.0
+Pillow>=9.0.0
+tqdm>=4.65.0
+
+# ── Phase 2 ───────────────────────────────────────────────────────────────────
+# torch / transformers  →  DINOv2 inference via AutoModel
+# faiss-gpu             →  FAISS nearest-neighbour index (use faiss-cpu if no GPU)
+# scikit-learn          →  silhouette_score, davies_bouldin_score
+torch>=2.0.0
+transformers>=4.35.0
+faiss-gpu>=1.7.4
+scikit-learn>=1.3.0
+
+# ── Phase 3 (reserved — install when Phase 3 is implemented) ─────────────────
+# torchvision>=0.15.0
+# cleanlab>=2.5.0

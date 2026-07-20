@@ -10,11 +10,13 @@ from typing import Dict, List, Set
 
 def EnsureDir(path: str) -> None:
     """Create a directory (and parents) if it does not already exist."""
+    
     os.makedirs(path, exist_ok=True)
 
 
 def LoadDoneIds(recordsPath: str) -> Set[str]:
     """Read an existing JSONL file and collect image_ids already processed (for resume)."""
+    
     doneIds: Set[str] = set()
     if not os.path.exists(recordsPath):
         return doneIds
@@ -35,6 +37,7 @@ def LoadDoneIds(recordsPath: str) -> Set[str]:
 
 def AppendRecords(recordsPath: str, records: List[Dict]) -> None:
     """Append a batch of records to the JSONL file, flushing immediately."""
+    
     with open(recordsPath, "a", encoding="utf-8") as handle:
         for record in records:
             handle.write(json.dumps(record) + "\n")
@@ -43,18 +46,21 @@ def AppendRecords(recordsPath: str, records: List[Dict]) -> None:
 
 def WriteJson(path: str, data: Dict) -> None:
     """Write a dict to a JSON file (pretty-printed)."""
+    
     with open(path, "w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2)
+        json.dump(data, handle, indent=4)
 
 
 def WriteText(path: str, text: str) -> None:
     """Write plain text to a file."""
+    
     with open(path, "w", encoding="utf-8") as handle:
         handle.write(text)
 
 
 def ReadAllRecords(recordsPath: str) -> List[Dict]:
     """Load every record from a JSONL file (used to recompute analytics after a run)."""
+    
     records: List[Dict] = []
     if not os.path.exists(recordsPath):
         return records
@@ -68,6 +74,7 @@ def ReadAllRecords(recordsPath: str) -> List[Dict]:
 
 def GitCommitHash() -> str:
     """Return the current git commit hash, or 'unknown' if unavailable."""
+    
     try:
         result: str = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
@@ -79,6 +86,7 @@ def GitCommitHash() -> str:
 
 def WriteRunMeta(path: str, runConfig: Dict) -> None:
     """Save the run configuration plus git commit for reproducibility."""
+    
     runConfig = dict(runConfig)
     runConfig["git_commit"] = GitCommitHash()
     WriteJson(path, runConfig)
