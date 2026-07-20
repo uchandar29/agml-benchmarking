@@ -244,9 +244,9 @@ class AgMLBenchmarkPipeline:
                 reuse=True,
             )
 
-            train_idx = set(splits.train["_orig_idx"])
-            val_idx   = set(splits.val["_orig_idx"])
-            test_idx  = set(splits.test["_orig_idx"])
+            train_idx = set(list(splits.train["_orig_idx"]))
+            val_idx   = set(list(splits.val["_orig_idx"]))
+            test_idx  = set(list(splits.test["_orig_idx"]))
 
             result = NearDuplicateMetric(
                 threshold=self.cfg.near_dup_threshold,

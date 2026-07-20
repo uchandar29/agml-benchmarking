@@ -42,7 +42,7 @@ class ClassImbalanceMetric(BaseMetric):
         schema: DatasetSchema,
     ) -> Dict[str, Any]:
         # Fetch the label column directly — avoids decoding any images.
-        labels = train_dataset[schema.label_col]
+        labels = list(train_dataset[schema.label_col])
         counts = Counter(labels)
 
         # Map integer keys → class name strings

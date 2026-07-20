@@ -17,19 +17,26 @@ PHASES="1 2"
 
 # Dataset-specific overrides — leave empty to use auto-detection
 HF_CONFIG_NAME="raw"   # e.g. "raw" for watermelon_disease_classification
-LABEL_COL="label"        # e.g. "label"
-IMAGE_COL="image"        # e.g. "image"
-METADATA_COLS=""    # e.g. "variety scale"
+LABEL_COL="label"
+IMAGE_COL="image"
+METADATA_COLS=""
 # ─────────────────────────────────────────────────────────────────────────────
 
 module load cuda/12
 module load conda
+source $(conda info --base)/etc/profile.d/conda.sh
 conda activate agvlm
 
 export HF_HOME=/group/jmearlesgrp/$USER/hf
 # export HF_HUB_OFFLINE=1
 # export TRANSFORMERS_OFFLINE=1
+
+# Move to repo root (sbatch is submitted from benchmark/)
+cd ..
+echo "Working directory: $PWD"
+
 export AGML_CONFIG=$PWD/benchmark/configs/config.json
+export PYTHONPATH=$PWD:$PYTHONPATH
 
 mkdir -p logs
 
@@ -40,7 +47,8 @@ EXTRA_ARGS=""
 [ -n "$IMAGE_COL"      ] && EXTRA_ARGS="$EXTRA_ARGS --image-col $IMAGE_COL"
 [ -n "$METADATA_COLS"  ] && EXTRA_ARGS="$EXTRA_ARGS --metadata-cols $METADATA_COLS"
 
-python -m benchmark.app \
+echo "Starting benchmarking for dataset: $DATASET"
+python3 -m benchmark.app \
     --dataset "$DATASET" \
     --phases $PHASES \
     $EXTRA_ARGS

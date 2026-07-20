@@ -57,9 +57,9 @@ class ExactDuplicateMetric(BaseMetric):
         image_col = schema.image_col
 
         # Build split membership sets keyed by original index
-        train_idx: Set[int] = set(train_dataset["_orig_idx"])
-        val_idx:   Set[int] = set(val_dataset["_orig_idx"])
-        test_idx:  Set[int] = set(test_dataset["_orig_idx"])
+        train_idx: Set[int] = set(list(train_dataset["_orig_idx"]))
+        val_idx:   Set[int] = set(list(val_dataset["_orig_idx"]))
+        test_idx:  Set[int] = set(list(test_dataset["_orig_idx"]))
 
         def split_of(orig_idx: int) -> str:
             if orig_idx in train_idx:
@@ -77,8 +77,8 @@ class ExactDuplicateMetric(BaseMetric):
         n = len(full_dataset)
         for start in tqdm(range(0, n, batch_size), desc="Hashing images (exact)"):
             batch = full_dataset[start: start + batch_size]
-            images      = batch[image_col]
-            orig_indices = batch["_orig_idx"]
+            images       = list(batch[image_col])
+            orig_indices = list(batch["_orig_idx"])
 
             for img, orig_idx in zip(images, orig_indices):
                 digest = hashlib.md5(img.tobytes()).hexdigest()

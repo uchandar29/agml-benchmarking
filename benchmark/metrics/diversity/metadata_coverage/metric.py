@@ -62,7 +62,7 @@ class MetadataCoverageMetric(BaseMetric):
 
         # Pull only the columns we need — no images decoded
         cols = [label_col] + schema.metadata_cols
-        data = {col: full_dataset[col] for col in cols}
+        data = {col: list(full_dataset[col]) for col in cols}
 
         coverage: Dict[str, Dict[str, Dict[str, int]]] = {}
 

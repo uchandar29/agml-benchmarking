@@ -59,18 +59,18 @@ Dataset-specific arguments (dataset name, column names) are passed at runtime, n
 
 ```bash
 # Minimal — config auto-loaded
-python -m benchmark.app \
+python3 -m benchmark.app \
     --dataset Project-AgML/rice_leaf_disease_classification \
     --phases 1 2
 
 # Multi-config HF dataset
-python -m benchmark.app \
+python3 -m benchmark.app \
     --dataset Project-AgML/watermelon_disease_classification \
     --hf-config-name raw \
     --phases 1 2
 
 # Dataset with explicit column names
-python -m benchmark.app \
+python3 -m benchmark.app \
     --dataset Project-AgML/banana_grade_variety_classification \
     --label-col label --image-col image \
     --metadata-cols variety scale \

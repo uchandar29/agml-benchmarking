@@ -158,8 +158,8 @@ class EmbeddingEngine:
 
         for start in tqdm(range(0, N, self.batch_size), desc="Embedding (DINOv2)"):
             batch = full_dataset[start : start + self.batch_size]
-            pil_images = batch[image_col]
-            batch_labels = batch[label_col]
+            pil_images   = list(batch[image_col])
+            batch_labels = list(batch[label_col])
 
             # Ensure RGB — DINOv2 processor expects 3-channel input
             pil_images = [

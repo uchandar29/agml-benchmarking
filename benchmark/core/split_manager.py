@@ -169,9 +169,9 @@ class SplitManager:
             "train_size": len(train_ds),
             "val_size": len(val_ds),
             "test_size": len(test_ds),
-            "train_indices": train_ds["_orig_idx"],
-            "val_indices":   val_ds["_orig_idx"],
-            "test_indices":  test_ds["_orig_idx"],
+            "train_indices": list(train_ds["_orig_idx"]),
+            "val_indices":   list(val_ds["_orig_idx"]),
+            "test_indices":  list(test_ds["_orig_idx"]),
         }
         path = os.path.join(output_dir, "splits.json")
         with open(path, "w") as fh:
