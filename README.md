@@ -1,137 +1,129 @@
-# Ag-VLM Reasoning Dataset Pipeline
+# AgML Benchmarking Pipeline
 
-Takes AgML image-classification datasets, runs an open-source VLM via vLLM
-(in-process, single GPU node), and emits a structured visual-reasoning dataset
-plus per-dataset accuracy analytics.
-
-For each image the pipeline runs two passes:
-
-1. **Predict-pass (Stage A)** — image + candidate class list; the model predicts
-   the class independently. Produces the `correct` flag and all analytics.
-2. **Rationalize-pass (Stage B)** — image + ground-truth label; the model
-   justifies the label with structured visual evidence. Produces the reasoning.
-
-`--no-predict` skips Stage A (pure rationalization, no analytics).
-`--contrastive` adds "why X and not Y" to Stage B, where Y is mined from the
-predict-pass confusion matrix.
+A generic, phased benchmarking pipeline for HuggingFace image-classification datasets. Computes structural quality, embedding-based, and (upcoming) model-training metrics for any dataset regardless of size, class count, or schema.
 
 ## Layout
 
 ```
-ag_vlm/
-  run.py        # CLI entry, multi-dataset orchestration
-  engine.py     # in-process vLLM init + batched guided-JSON generate
-  prompts.py    # predict + rationalize prompts and JSON schemas
-  data.py       # AgML loading, image prep, stable image_id
-  analytics.py  # accuracy, confusion matrix, per-class metrics
-  io.py         # JSONL append, resume, run_meta
-  config.yaml   # tp, max_len, dtype, evidence fields, sampling
-slurm/run_agvlm.sbatch
+benchmark/
+  app.py                    # entry point — programmatic and CLI
+  config.py                 # PipelineConfig (infrastructure settings)
+  configs/
+    config.json             # universal config file
+  core/
+    dataset_adapter.py      # HF dataset loading + schema auto-detection
+    split_manager.py        # stratified 70 / 15 / 15 splits
+    embedding_engine.py     # DINOv2 inference + embedding cache
+  metrics/
+    structural/
+      class_imbalance/      # class distribution + entropy
+      exact_duplicate/      # MD5-based pixel-exact duplicate detection
+      resolution_consistency/  # image size and aspect ratio stats
+      near_duplicate/       # FAISS cosine similarity near-dup detection
+    diversity/
+      metadata_coverage/    # label × metadata contingency analysis
+      intra_class_diversity/  # mean L2 distance to per-class centroid
+    difficulty/
+      feature_separability/ # silhouette score + Davies-Bouldin index
+  output/
+    writer.py               # incremental JSON report writer
+  run_benchmark.sbatch      # SLURM job script for FARM @ UC Davis
 ```
+
+## Phases
+
+**Phase 1 — Structural Quality** (no GPU required)
+- Class Imbalance
+- Exact Duplicate Detection
+- Resolution Consistency
+- Metadata Coverage
+
+**Phase 2 — Embedding-Based Metrics** (GPU required, DINOv2)
+- Near-Duplicate Detection (FAISS)
+- Feature Separability (Silhouette + Davies-Bouldin)
+- Intra-Class Diversity
+
+**Phase 3 — Model Training Metrics** *(coming soon)*
+
+## Config
+
+Infrastructure settings live in `benchmark/configs/config.json`. The config is auto-discovered in this order:
+
+1. `$AGML_CONFIG` environment variable
+2. `benchmark/config.json` in the current working directory
+3. Built-in defaults
+
+Dataset-specific arguments (dataset name, column names) are passed at runtime, not stored in the config.
 
 ## CLI
 
+```bash
+# Minimal — config auto-loaded
+python -m benchmark.app \
+    --dataset Project-AgML/rice_leaf_disease_classification \
+    --phases 1 2
+
+# Multi-config HF dataset
+python -m benchmark.app \
+    --dataset Project-AgML/watermelon_disease_classification \
+    --hf-config-name raw \
+    --phases 1 2
+
+# Dataset with explicit column names
+python -m benchmark.app \
+    --dataset Project-AgML/banana_grade_variety_classification \
+    --label-col label --image-col image \
+    --metadata-cols variety scale \
+    --phases 1 2
 ```
-python -m ag_vlm.run \
-  --datasets bean_disease_uganda,plant_village \
-  --model Qwen/Qwen2.5-VL-7B-Instruct \
-  --output-dir /path/to/out \
-  [--limit 200] [--no-predict] [--contrastive]
+
+## Programmatic
+
+```python
+from benchmark.app import AgMLBenchmarkPipeline
+
+pipeline = AgMLBenchmarkPipeline("Project-AgML/rice_leaf_disease_classification")
+pipeline.run(phases=[1, 2])
 ```
-
-Everything else (tensor-parallel size, max-model-len, dtype, evidence-field
-schema, sampling, image resolution cap) lives in `ag_vlm/config.yaml`.
-
-## Outputs (per dataset, under `<output-dir>/<dataset>/`)
-
-- `records.jsonl` — one record per image (true_label, predicted_class, correct,
-  predict_reasoning, rationale). Written incrementally; reruns skip finished ids.
-- `analytics.json` / `analytics.md` — accuracy, error rate, per-class
-  precision/recall/support, confusion matrix, confidence calibration, malformed count.
-- `run_meta.json` (at output-dir root) — model, flags, datasets, git commit.
 
 ## Setup on FARM (conda)
 
 ```bash
+module load cuda/12
 module load conda
-conda create -n agvlm python=3.11 -y
 conda activate agvlm
-pip install -r requirements.txt
+pip install -r benchmark/requirements.txt
 ```
 
-**vLLM version:** this pipeline targets **vLLM >= 0.11.0** (it uses the
-`StructuredOutputsParams` structured-output API). Older vLLM will fail at import
-with a clear message; upgrade rather than downgrade the code.
-
-### GPU kernel toolchain (FARM-specific, learned the hard way)
-
-On recent GPUs (Hopper / Ada, e.g. the `gpu-6000_ada-h` nodes) vLLM JIT-compiles
-some kernels (the FlashInfer sampler, and DeepGEMM for FP8 models) at startup.
-Those builds need a CUDA toolkit **and** a matching host C++ compiler on the node.
-The clean setup that works:
+Pre-download dataset and model from the **login node** before submitting (compute nodes may be offline):
 
 ```bash
-module load cuda/12          # provides nvcc 12.x (matches the torch CUDA build)
-module load conda            # NOTE: gcc/13 and conda conflict as modules — don't load gcc as a module
-conda activate agvlm
-conda install -c conda-forge gxx=13 -y   # one-time: g++ 13 inside the env, no module conflict
+export HF_HOME=/group/jmearlesgrp/$USER/hf
+
+# Dataset
+python -c "
+from datasets import load_dataset
+load_dataset('Project-AgML/rice_leaf_disease_classification', cache_dir='$HF_HOME')
+"
+
+# DINOv2 model (Phase 2)
+python -c "
+from transformers import AutoModel, AutoImageProcessor
+AutoImageProcessor.from_pretrained('facebook/dinov2-base', cache_dir='$HF_HOME')
+AutoModel.from_pretrained('facebook/dinov2-base', cache_dir='$HF_HOME')
+"
 ```
 
-Confirm `nvcc --version` reports **12.x** (not an older system CUDA) before running.
+## Running on FARM
 
-**Fallback if the JIT toolchain still fights you:** disable the JIT kernels and
-let vLLM use its precompiled/native paths (same outputs, slightly slower):
+Edit the variables at the top of `benchmark/run_benchmark.sbatch` and submit:
 
 ```bash
-export VLLM_USE_FLASHINFER_SAMPLER=0   # avoids the FlashInfer sampler JIT
-export VLLM_USE_DEEP_GEMM=0            # avoids the DeepGEMM FP8 JIT (FP8 models only)
+sbatch benchmark/run_benchmark.sbatch
 ```
 
-Both env vars are harmless when not needed, so they are a safe default for the
-sbatch. FP8 models are the most JIT-heavy — for those, the Apptainer route
-(below) is the least fragile.
+Logs are written to `logs/benchmark_<job_id>.out` and `.err`.
 
-Pre-stage model + data from the **login node** (compute nodes may be offline):
+---
 
-```bash
-export HF_HOME=/group_or_scratch/$USER/hf
-huggingface-cli download Qwen/Qwen2.5-VL-7B-Instruct
-export AGML_DATA_DIR=/group_or_scratch/$USER/agml   # pre-trigger AgML download here
-```
-
-In the job set `HF_HUB_OFFLINE=1` / `TRANSFORMERS_OFFLINE=1` if nodes are offline.
-
-### Apptainer alternative
-
-If FARM's CUDA/torch conflicts with the pip wheels — or the FP8 kernel JIT builds
-keep failing — pull a vLLM container (it ships a matched CUDA + GCC toolchain, so
-every JIT build succeeds and none of the env vars above are needed) and run the
-same `python -m ag_vlm.run` command inside `apptainer exec --nv <image> ...`.
-
-## Running
-
-Smoke-test interactively first:
-
-```bash
-srun --partition=gpu-6000_ada-h --account=jmearlesgrp --gres=gpu:1 \
-     --cpus-per-task=12 --mem=64G --time=01:00:00 --pty /bin/bash
-# then: module load cuda/12 conda && conda activate agvlm && export HF_HOME=... AGML_DATA_DIR=...
-python -m ag_vlm.run --datasets bean_disease_uganda \
-  --model Qwen/Qwen2.5-VL-7B-Instruct --output-dir ./out --limit 16
-```
-
-Give the interactive session enough wall-time: the first run pays a one-time
-model-load + `torch.compile` cost (minutes) before inference, and Slurm kills the
-job the instant `--time` expires regardless of progress. Subsequent runs are fast
-(weights and compiled graphs are cached).
-
-Then submit the batch job: `sbatch slurm/run_agvlm.sbatch`.
-
-Runs are resumable — on a preemptible partition, just resubmit and finished
-`image_id`s are skipped (records are flushed every `batch_size` images).
-
-## Verify before scaling
-
-Inspect 10–20 rationales for faithfulness, confirm the confusion-matrix math by
-hand on a small slice, and confirm a resubmit skips already-finished records.
-```
+> **Reasoning pipeline** — a separate VLM-based visual reasoning dataset pipeline (`ag_vlm/`) also lives in this repo. Documentation for that module is maintained separately.
