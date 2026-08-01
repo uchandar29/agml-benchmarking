@@ -69,6 +69,7 @@ from benchmark.config import PipelineConfig
 from benchmark.core.dataset_adapter import DatasetAdapter
 from benchmark.core.embedding_engine import EmbeddingEngine
 from benchmark.core.split_manager import SplitManager
+from benchmark.core.umap_projector import UMAPProjector
 from benchmark.metrics.difficulty import FeatureSeparabilityMetric
 from benchmark.metrics.diversity import IntraClassDiversityMetric, MetadataCoverageMetric
 from benchmark.metrics.structural import (
@@ -297,6 +298,17 @@ class AgMLBenchmarkPipeline:
             )
 
             writer.complete_phase(2)
+
+            # ── UMAP projection → JSON for website ────────────────────────────
+            UMAPProjector().run(
+                embeddings=embeddings,
+                labels=emb_labels,
+                label_names=schema.label_names,
+                train_idx=train_idx,
+                val_idx=val_idx,
+                test_idx=test_idx,
+                run_dir=writer.run_dir,
+            )
 
         # ── Phase 3 (placeholder) ─────────────────────────────────────────────
         if 3 in phases:

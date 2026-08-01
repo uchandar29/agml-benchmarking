@@ -126,14 +126,6 @@ class NearDuplicateMetric(BaseMetric):
 
         # ── Analyse clusters ──────────────────────────────────────────────────
         cluster_map: Dict[int, list] = defaultdict(list)
-        for i in range(N):
-            root = find(i)
-            if root in {find(p) for p in pair_found if p == i or (p[0] == i or p[1] == i)} or \
-               any(find(a) == find(i) and find(b) == find(i) for a, b in pair_found if a != b):
-                cluster_map[root].append(i)
-
-        # Rebuild cluster_map cleanly from pair_found
-        cluster_map = defaultdict(list)
         in_dup = set()
         for a, b in pair_found:
             in_dup.add(a)

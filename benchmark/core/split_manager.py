@@ -23,7 +23,6 @@ Design notes
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -108,9 +107,7 @@ class SplitManager:
         val_ds  = split2["train"]
         test_ds = split2["test"]
 
-        # ---------------------------- Persist indices ----------------------------
         os.makedirs(output_dir, exist_ok=True)
-        self._save_indices(train_ds, val_ds, test_ds, output_dir)
 
         print(
             f"Split complete  →  "
@@ -155,25 +152,3 @@ class SplitManager:
                 seed=self.seed,
             )
 
-    def _save_indices(
-        self,
-        train_ds: Dataset,
-        val_ds: Dataset,
-        test_ds: Dataset,
-        output_dir: str,
-    ) -> None:
-        """Write split membership to splits.json for reproducibility."""
-        
-        payload = {
-            "seed": self.seed,
-            "train_size": len(train_ds),
-            "val_size": len(val_ds),
-            "test_size": len(test_ds),
-            "train_indices": list(train_ds["_orig_idx"]),
-            "val_indices":   list(val_ds["_orig_idx"]),
-            "test_indices":  list(test_ds["_orig_idx"]),
-        }
-        path = os.path.join(output_dir, "splits.json")
-        with open(path, "w") as fh:
-            json.dump(payload, fh, indent=4)
-        print(f"  Split indices → {path}")

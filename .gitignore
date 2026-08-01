@@ -29,6 +29,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+.DS_Store
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -174,6 +175,9 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# IDE specific files
+.vscode/
+
 ### venv ###
 # Virtualenv
 # http://iamzed.com/2009/05/07/a-primer-on-virtualenv/
@@ -186,4 +190,8 @@ pyrightconfig.json
 pyvenv.cfg
 pip-selfcheck.json
 
-# End of https://www.toptal.com/developers/gitignore/api/python,venv
+# Development
+.claude/
+.agml-benchmarking/
+.personal/*
+.reasoning/

@@ -95,21 +95,22 @@ class EmbeddingEngine:
         embeddings : float32 ndarray of shape (N, D), L2-normalised.
         labels     : int64 ndarray of shape (N,).
         """
-        emb_path   = os.path.join(run_dir, "embeddings.npy")
-        label_path = os.path.join(run_dir, "labels.npy")
+        emb_dir    = os.path.join(run_dir, "embeddings")
+        emb_path   = os.path.join(emb_dir, "embeddings.npy")
+        label_path = os.path.join(emb_dir, "labels.npy")
 
         if reuse and os.path.exists(emb_path) and os.path.exists(label_path):
-            print(f"  Reusing cached embeddings from {run_dir}")
+            print(f"  Reusing cached embeddings from {emb_dir}")
             return np.load(emb_path), np.load(label_path)
 
         self._load_model()
 
         embeddings, labels = self._encode(full_dataset, schema)
 
-        os.makedirs(run_dir, exist_ok=True)
+        os.makedirs(emb_dir, exist_ok=True)
         np.save(emb_path,   embeddings)
         np.save(label_path, labels)
-        print(f"  Embeddings saved → {emb_path}  shape={embeddings.shape}")
+        print(f"  Embeddings saved → {emb_dir}  shape={embeddings.shape}")
 
         return embeddings, labels
 
