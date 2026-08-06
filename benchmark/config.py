@@ -71,9 +71,21 @@ class PipelineConfig:
     """Silhouette score is O(N²) in memory.  When N exceeds this value a
     stratified random sample is drawn instead of using the full matrix."""
 
-    # ── Phase 3 (reserved) ─────────────────────────────────────────────────────
+    # ── Phase 3 — reference model training ────────────────────────────────────
     backbone: str = "resnet18"
+    """Torchvision model used as the reference classifier for Dataset Cartography
+    and Class Confusability.  resnet18 is the default — fast and well-understood."""
+
+    cartography_epochs: int = 30
+    """Number of epochs to fine-tune the reference model.  More epochs give
+    smoother confidence trajectories but cost more compute."""
+
+    cartography_lr: float = 1e-3
+    """Learning rate for the reference model fine-tuning run."""
+
     cv_folds: int = 5
+    """Number of cross-validation folds for Label Noise Rate (cleanlab OOF
+    probabilities).  5 is the standard choice in the cleanlab paper."""
 
     # ── Derived ────────────────────────────────────────────────────────────────
     @property

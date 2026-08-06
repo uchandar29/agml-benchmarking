@@ -12,5 +12,7 @@
   "max_silhouette_samples": 10000,
 
   "backbone": "resnet18",
+  "cartography_epochs": 30,
+  "cartography_lr": 0.001,
   "cv_folds": 5
 }
