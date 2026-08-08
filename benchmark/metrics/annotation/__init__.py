@@ -1,1 +1,3 @@
-# Phase 3 metrics will be added here.
+from .label_noise.metric import LabelNoiseMetric
+
+__all__ = ["LabelNoiseMetric"]
