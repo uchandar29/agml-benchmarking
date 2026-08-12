@@ -65,12 +65,20 @@ import argparse
 import os
 from typing import List, Optional
 
+import numpy as np
+
 from benchmark.config import PipelineConfig
 from benchmark.core.dataset_adapter import DatasetAdapter
 from benchmark.core.embedding_engine import EmbeddingEngine
+from benchmark.core.reference_trainer import ReferenceModelTrainer
 from benchmark.core.split_manager import SplitManager
 from benchmark.core.umap_projector import UMAPProjector
-from benchmark.metrics.difficulty import FeatureSeparabilityMetric
+from benchmark.metrics.annotation import LabelNoiseMetric
+from benchmark.metrics.difficulty import (
+    ClassConfusabilityMetric,
+    DatasetCartographyMetric,
+    FeatureSeparabilityMetric,
+)
 from benchmark.metrics.diversity import IntraClassDiversityMetric, MetadataCoverageMetric
 from benchmark.metrics.structural import (
     ClassImbalanceMetric,
@@ -107,6 +115,7 @@ class AgMLBenchmarkPipeline:
         label_col: Optional[str] = None,
         image_col: Optional[str] = None,
         metadata_cols: Optional[List[str]] = None,
+        compound_label_cols: Optional[List[str]] = None,
         cfg: Optional[PipelineConfig] = None,
     ) -> None:
         """
@@ -119,12 +128,18 @@ class AgMLBenchmarkPipeline:
             HF dataset config name (e.g. ``'raw'``).  None → HF default.
         label_col:
             Column with ClassLabel dtype.  Auto-detected when None.
+            Ignored when compound_label_cols is set.
         image_col:
             Column with Image dtype.  Auto-detected when None.
         metadata_cols:
             Columns to treat as metadata for MetadataCoverageMetric.
             Auto-detected (all non-image, non-label columns) when None.
             Pass ``[]`` to explicitly disable metadata analysis.
+        compound_label_cols:
+            Two or more column names to combine into a single compound label.
+            Values are joined with ", " in the given order, e.g.
+            ``['crop_type', 'label']`` → ``"tomato, bruised"``.
+            When set, overrides label_col.
         cfg:
             Infrastructure config.  When None, auto-loaded via
             ``PipelineConfig.load()`` (checks ``$AGML_CONFIG``, then
@@ -135,6 +150,7 @@ class AgMLBenchmarkPipeline:
         self.label_col = label_col
         self.image_col = image_col
         self.metadata_cols = metadata_cols
+        self.compound_label_cols = compound_label_cols
         self.cfg = cfg if cfg is not None else PipelineConfig.load()
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -173,6 +189,7 @@ class AgMLBenchmarkPipeline:
             label_col=self.label_col,
             image_col=self.image_col,
             metadata_cols=self.metadata_cols,
+            compound_label_cols=self.compound_label_cols,
         )
         full_dataset = adapter.load()
         schema = adapter.schema()
@@ -310,9 +327,83 @@ class AgMLBenchmarkPipeline:
                 run_dir=writer.run_dir,
             )
 
-        # ── Phase 3 (placeholder) ─────────────────────────────────────────────
+        # ── Phase 3 ───────────────────────────────────────────────────────────
         if 3 in phases:
-            raise NotImplementedError("Phase 3 is not yet implemented.")
+            print("\n── Phase 3: Training Dynamics + Annotation Reliability ──\n")
+
+            # Phase 2 embeddings are required for Label Noise — load from cache
+            # if Phase 2 was not run in this session.
+            engine = EmbeddingEngine(
+                model_name=self.cfg.embed_model,
+                batch_size=self.cfg.embed_batch_size,
+            )
+            embeddings, emb_labels = engine.run(
+                full_dataset=splits.full,
+                schema=schema,
+                run_dir=writer.run_dir,
+                reuse=True,
+            )
+
+            # Train reference model (ResNet-18) — shared by Cartography and
+            # Confusability so we only pay the training cost once.
+            trainer = ReferenceModelTrainer(
+                backbone=self.cfg.backbone,
+                n_epochs=self.cfg.cartography_epochs,
+                lr=self.cfg.cartography_lr,
+                batch_size=self.cfg.embed_batch_size,
+            )
+            ref_model, conf_history, orig_idx_order = trainer.run(
+                train_dataset=splits.train,
+                schema=schema,
+                run_dir=writer.run_dir,
+                reuse=True,
+            )
+
+            result = DatasetCartographyMetric().run(
+                conf_history=conf_history,
+                orig_idx_order=orig_idx_order,
+                schema=schema,
+            )
+            writer.add("dataset_cartography", result)
+            print(
+                f"  [✓] dataset_cartography    "
+                f"easy={result['pct_easy']}%  "
+                f"ambiguous={result['pct_ambiguous']}%  "
+                f"hard={result['pct_hard']}%"
+            )
+
+            result = ClassConfusabilityMetric().run(
+                model=ref_model,
+                test_dataset=splits.test,
+                schema=schema,
+                batch_size=self.cfg.embed_batch_size,
+            )
+            writer.add("class_confusability", result)
+            top_pair = result["top_confused_pairs"][0] if result["top_confused_pairs"] else {}
+            print(
+                f"  [✓] class_confusability    "
+                f"accuracy={result['accuracy']}  "
+                f"most_confused={top_pair.get('true_class', 'n/a')} → "
+                f"{top_pair.get('predicted_as', 'n/a')} "
+                f"({top_pair.get('confusion_rate', 0):.1%})"
+            )
+
+            # Full-dataset embeddings and labels for Label Noise k-fold CV
+            full_orig_idx = np.arange(len(embeddings), dtype=np.int64)
+            result = LabelNoiseMetric(cv_folds=self.cfg.cv_folds).run(
+                embeddings=embeddings,
+                labels=emb_labels,
+                orig_idx_order=full_orig_idx,
+                schema=schema,
+            )
+            writer.add("label_noise", result)
+            print(
+                f"  [✓] label_noise            "
+                f"estimated_rate={result['estimated_noise_rate']:.1%}  "
+                f"flagged={result['n_noisy_samples']}/{result['n_total_samples']}"
+            )
+
+            writer.complete_phase(3)
 
         print(f"\n{'─' * 60}")
         print(f"  Report → {writer.path()}")
@@ -412,6 +503,18 @@ examples:
             "Pass no names (--metadata-cols) to disable metadata analysis."
         ),
     )
+    parser.add_argument(
+        "--compound-label-cols",
+        nargs="+",
+        default=None,
+        metavar="COL",
+        help=(
+            "Two or more columns to combine into a compound label.  "
+            "Values are joined with ', ' in the given order.  "
+            "Example: --compound-label-cols crop_type label  "
+            "→ class names like 'tomato, bruised'."
+        ),
+    )
 
     # ── Run control ───────────────────────────────────────────────────────────
     parser.add_argument(
@@ -437,5 +540,6 @@ if __name__ == "__main__":
         label_col=_args.label_col,
         image_col=_args.image_col,
         metadata_cols=_args.metadata_cols,
+        compound_label_cols=_args.compound_label_cols,
         cfg=_cfg,
     ).run(phases=_args.phases)
