@@ -55,6 +55,7 @@ class ReportWriter:
         self._report: Dict[str, Any] = {
             "dataset": dataset_name,
             "date": self._run_date,
+            "reproducibility": {},
             "phases_completed": [],
             "metrics": {},
         }
@@ -63,6 +64,33 @@ class ReportWriter:
         self._flush()
 
     # ── Public API ────────────────────────────────────────────────────────────
+
+    def set_reproducibility(self, cfg) -> None:
+        """
+        Embed the key config fields that directly affect metric outcomes so
+        anyone can reproduce the exact same results from the report alone.
+
+        Fields included
+        ---------------
+        split_seed, train_ratio, val_ratio, test_ratio  -- recreate the exact split
+        embed_model                                      -- Phase 2 DINOv2 variant
+        near_dup_threshold                               -- near-duplicate cutoff
+        backbone, cartography_epochs, cartography_lr     -- Phase 3 reference model
+        cv_folds                                         -- Label Noise CV folds
+        """
+        self._report["reproducibility"] = {
+            "split_seed":          cfg.split_seed,
+            "train_ratio":         cfg.train_ratio,
+            "val_ratio":           cfg.val_ratio,
+            "test_ratio":          cfg.test_ratio,
+            "embed_model":         cfg.embed_model,
+            "near_dup_threshold":  cfg.near_dup_threshold,
+            "backbone":            cfg.backbone,
+            "cartography_epochs":  cfg.cartography_epochs,
+            "cartography_lr":      cfg.cartography_lr,
+            "cv_folds":            cfg.cv_folds,
+        }
+        self._flush()
 
     def add(self, metric_name: str, result: Dict[str, Any]) -> None:
         """

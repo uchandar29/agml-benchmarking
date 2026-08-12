@@ -178,7 +178,9 @@ class AgMLBenchmarkPipeline:
             output_dir=self.cfg.output_dir,
         )
 
-        # Persist the exact config used alongside the report for reproducibility
+        # Embed key reproducibility fields directly in the report so the file
+        # is self-contained, and persist the full config alongside it.
+        writer.set_reproducibility(self.cfg)
         self.cfg.to_json(os.path.join(writer.run_dir, "config_used.json"))
 
         _banner(self.dataset_name, phases, writer.path())
