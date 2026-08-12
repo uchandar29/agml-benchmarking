@@ -97,33 +97,23 @@ class DatasetCartographyMetric(BaseMetric):
 
 		categories = self._classify(confidence, variability)
 
-		sample_map: List[Dict[str, Any]] = [
-			{
-				"orig_idx":   int(orig_idx_order[i]),
-				"confidence": round(float(confidence[i]), 4),
-				"variability": round(float(variability[i]), 4),
-				"category":   categories[i],
-			}
-			for i in range(N)
-		]
-
-		counts = {cat: sum(1 for s in sample_map if s["category"] == cat)
-		          for cat in ("easy", "ambiguous", "hard")}
+		counts = {"easy": 0, "ambiguous": 0, "hard": 0}
+		for cat in categories:
+			counts[cat] += 1
 
 		return {
-			"n_easy":               counts["easy"],
-			"n_ambiguous":          counts["ambiguous"],
-			"n_hard":               counts["hard"],
-			"pct_easy":             round(counts["easy"] / N * 100, 2),
-			"pct_ambiguous":        round(counts["ambiguous"] / N * 100, 2),
-			"pct_hard":             round(counts["hard"] / N * 100, 2),
-			"mean_confidence":      round(float(confidence.mean()), 4),
-			"mean_variability":     round(float(variability.mean()), 4),
-			"easy_threshold":       self.easy_threshold,
-			"hard_threshold":       self.hard_threshold,
+			"n_easy":                counts["easy"],
+			"n_ambiguous":           counts["ambiguous"],
+			"n_hard":                counts["hard"],
+			"pct_easy":              round(counts["easy"] / N * 100, 2),
+			"pct_ambiguous":         round(counts["ambiguous"] / N * 100, 2),
+			"pct_hard":              round(counts["hard"] / N * 100, 2),
+			"mean_confidence":       round(float(confidence.mean()), 4),
+			"mean_variability":      round(float(variability.mean()), 4),
+			"easy_threshold":        self.easy_threshold,
+			"hard_threshold":        self.hard_threshold,
 			"variability_threshold": self.variability_threshold,
-			"n_epochs":             n_epochs,
-			"sample_map":           sample_map,
+			"n_epochs":              n_epochs,
 		}
 
 	def _classify(self, confidence: np.ndarray, variability: np.ndarray) -> List[str]:
