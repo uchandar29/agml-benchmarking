@@ -1,19 +1,19 @@
 #!/bin/bash
-#SBATCH --job-name=agml-benchmark
+#SBATCH --job-name=agbenchmark_watermelon_disease_classification
 #SBATCH --partition=gpu-6000_ada-h
 #SBATCH --account=jmearlesgrp
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=12
-#SBATCH --mem=64G
+#SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --output=logs/benchmark_%j.out
-#SBATCH --error=logs/benchmark_%j.err
+#SBATCH --output=logs/%x_%j.out
+#SBATCH --error=logs/%x_%j.err
 
 # ── Edit these before submitting ──────────────────────────────────────────────
 DATASET="Project-AgML/watermelon_disease_classification"
-PHASES="1 2"
+PHASES="1 2 3 4"
 
 # Dataset-specific overrides — leave empty to use auto-detection
 HF_CONFIG_NAME="raw"   # e.g. "raw" for watermelon_disease_classification
@@ -23,10 +23,7 @@ METADATA_COLS=""
 # ─────────────────────────────────────────────────────────────────────────────
 
 module load cuda/12
-module load conda
-source $(conda info --base)/etc/profile.d/conda.sh
-conda activate agvlm
-
+export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
 export HF_HOME=/group/jmearlesgrp/$USER/hf
 # export HF_HUB_OFFLINE=1
 # export TRANSFORMERS_OFFLINE=1
@@ -48,7 +45,7 @@ EXTRA_ARGS=""
 [ -n "$METADATA_COLS"  ] && EXTRA_ARGS="$EXTRA_ARGS --metadata-cols $METADATA_COLS"
 
 echo "Starting benchmarking for dataset: $DATASET"
-python3 -m benchmark.app \
+uv run python -m benchmark.app \
     --dataset "$DATASET" \
     --phases $PHASES \
     $EXTRA_ARGS
