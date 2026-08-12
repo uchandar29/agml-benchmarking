@@ -40,7 +40,11 @@ class DatasetAdapter:
          own splits via SplitManager — pre-existing splits are ignored).
       3. Infers image_col, label_col, and metadata_cols from feature dtypes.
       4. Allows caller to override any auto-detected value.
+      5. Optionally combines multiple columns into a compound label column
+         (e.g. crop_type + label → "tomato, bruised").
     """
+
+    _COMPOUND_COL = "_compound_label"
 
     def __init__(
         self,
@@ -49,12 +53,14 @@ class DatasetAdapter:
         label_col: Optional[str] = None,
         image_col: Optional[str] = None,
         metadata_cols: Optional[List[str]] = None,
+        compound_label_cols: Optional[List[str]] = None,
     ) -> None:
         self.dataset_name = dataset_name
         self.config_name = config_name
         self._override_image_col = image_col
         self._override_label_col = label_col
         self._override_metadata_cols = metadata_cols
+        self._compound_label_cols = compound_label_cols
 
         self._dataset: Optional[Dataset] = None
         self._schema: Optional[DatasetSchema] = None
@@ -86,6 +92,10 @@ class DatasetAdapter:
                 dataset = raw[first_key]
         else:
             dataset = raw
+
+        if self._compound_label_cols:
+            dataset = self._create_compound_label(dataset)
+            self._override_label_col = self._COMPOUND_COL
 
         self._dataset = dataset
         self._schema = self._detect_schema(dataset)
@@ -142,6 +152,61 @@ class DatasetAdapter:
         except Exception:
             # If inspection fails, let load_dataset sort it out
             return None
+
+    def _create_compound_label(self, dataset: Dataset) -> Dataset:
+        """
+        Combine multiple columns into a single compound ClassLabel column.
+
+        Values are joined with ", " in the order the columns are specified.
+        ClassLabel (integer) columns are decoded to their string names first.
+        The resulting column is named ``_compound_label`` and cast to
+        ClassLabel so SplitManager can stratify on it.
+
+        Example
+        -------
+        compound_label_cols=["crop_type", "label"]
+        → new column values like "tomato, bruised", "pepper, healthy", …
+        """
+        from datasets import ClassLabel as HFClassLabel
+
+        cols = self._compound_label_cols
+        missing = [c for c in cols if c not in dataset.features]
+        if missing:
+            raise ValueError(
+                f"compound_label_cols references columns not in dataset: {missing}.  "
+                f"Available columns: {list(dataset.features.keys())}"
+            )
+
+        # Decode each column to strings (handles both ClassLabel and raw strings)
+        col_strings: dict[str, list[str]] = {}
+        for col in cols:
+            raw = list(dataset[col])
+            feat = dataset.features[col]
+            if isinstance(feat, HFClassLabel):
+                col_strings[col] = [feat.names[i] for i in raw]
+            else:
+                col_strings[col] = [str(v) for v in raw]
+
+        n = len(dataset)
+        compound_values = [
+            ", ".join(col_strings[col][i] for col in cols)
+            for i in range(n)
+        ]
+
+        unique_labels = sorted(set(compound_values))
+        label_to_int = {lbl: idx for idx, lbl in enumerate(unique_labels)}
+        int_values = [label_to_int[v] for v in compound_values]
+
+        print(
+            f"  Compound label from {cols} → "
+            f"{len(unique_labels)} classes: {unique_labels}"
+        )
+
+        dataset = dataset.add_column(self._COMPOUND_COL, int_values)
+        dataset = dataset.cast_column(
+            self._COMPOUND_COL, HFClassLabel(names=unique_labels)
+        )
+        return dataset
 
     def _detect_schema(self, dataset: Dataset) -> DatasetSchema:
         features = dataset.features
