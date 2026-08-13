@@ -120,7 +120,7 @@ class ReferenceModelTrainer:
 			print(f"  Reusing cached reference model from {phase3_dir}")
 			model = self._build_model(schema.num_classes)
 			import torch
-			model.load_state_dict(torch.load(model_path, map_location="cpu"))
+			model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=True))
 			model.eval()
 			return model, np.load(conf_path), np.load(order_path)
 

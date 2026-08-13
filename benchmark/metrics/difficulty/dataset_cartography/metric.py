@@ -36,8 +36,7 @@ Output keys
   mean_variability                        -- mean variability across all samples
   easy_threshold, hard_threshold,
   variability_threshold                   -- thresholds used
-  sample_map                             -- list of {orig_idx, confidence,
-                                           variability, category} per sample
+  n_epochs                               -- number of training epochs used
 """
 
 from __future__ import annotations

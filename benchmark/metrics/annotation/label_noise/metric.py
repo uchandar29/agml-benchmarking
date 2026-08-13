@@ -7,7 +7,7 @@ confident learning (Northcutt et al., 2021 — https://arxiv.org/abs/1911.00068)
 Method
 ------
 1. Run stratified k-fold cross-validation on the DINOv2 embeddings using
-   logistic regression to obtain out-of-fold (OOF) predicted probabilities
+   logistic regression (lbfgs, multinomial by default) to obtain out-of-fold (OOF) predicted probabilities
    for every sample in the dataset.
 2. Pass the OOF probabilities and ground-truth labels to cleanlab's
    find_label_issues(), which identifies samples where the model's confident
@@ -102,7 +102,6 @@ class LabelNoiseMetric(BaseMetric):
 				max_iter=1000,
 				C=1.0,
 				solver="lbfgs",
-				multi_class="multinomial",
 				random_state=42,
 				n_jobs=-1,
 			)
