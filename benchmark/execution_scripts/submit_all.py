@@ -56,11 +56,17 @@ def submit(cfg: dict, dry_run: bool) -> str:
 	name     = cfg["name"]
 	job_name = f"agbenchmark_{short_name(name)}"
 
+	# Create the logs dir here so the sbatch --output path always exists
+	logs_dir = REPO_ROOT / "logs"
+	logs_dir.mkdir(exist_ok=True)
+
 	cmd = [
 		"sbatch",
 		f"--job-name={job_name}",
 		f"--mem={cfg.get('mem', '32G')}",
 		f"--time={cfg.get('time', '12:00:00')}",
+		f"--output={logs_dir}/%x_%j.out",
+		f"--error={logs_dir}/%x_%j.err",
 		str(SBATCH_SCRIPT),
 	]
 
@@ -69,6 +75,7 @@ def submit(cfg: dict, dry_run: bool) -> str:
 	compound = cfg.get("compound_label_cols", [])
 	env = os.environ.copy()
 	env.update({
+		"REPO_ROOT":           str(REPO_ROOT),
 		"DATASET":             name,
 		"PHASES":              cfg.get("phases", "1 2 3"),
 		"HF_CONFIG_NAME":      cfg.get("hf_config_name", ""),

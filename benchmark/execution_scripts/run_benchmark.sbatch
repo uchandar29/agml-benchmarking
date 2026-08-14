@@ -7,8 +7,7 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --output=logs/%x_%j.out
-#SBATCH --error=logs/%x_%j.err
+# --output and --error are set by submit_all.py using absolute paths
 
 # ── How this script is driven ─────────────────────────────────────────────────
 # Normally submitted via benchmark/execution_scripts/submit_all.py, which sets
@@ -24,17 +23,16 @@ module load cuda/12
 export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
 export HF_HOME=/group/jmearlesgrp/$USER/hf
 
-# SLURM_SUBMIT_DIR is the directory from which sbatch was called.
-# submit_all.py runs from repo root, so this always resolves correctly.
-cd "$SLURM_SUBMIT_DIR"
+# REPO_ROOT is injected by submit_all.py as an env var.
+# For manual one-off runs, set it before calling sbatch:
+#   REPO_ROOT=/path/to/agml-benchmarking sbatch --job-name=... run_benchmark.sbatch
+cd "$REPO_ROOT"
 echo "Working directory: $PWD"
 echo "Dataset          : $DATASET"
 echo "Phases           : $PHASES"
 
 export AGML_CONFIG=$PWD/benchmark/configs/config.json
 export PYTHONPATH=$PWD:$PYTHONPATH
-
-mkdir -p logs
 
 EXTRA_ARGS=""
 [ -n "$HF_CONFIG_NAME"      ] && EXTRA_ARGS="$EXTRA_ARGS --hf-config-name $HF_CONFIG_NAME"
