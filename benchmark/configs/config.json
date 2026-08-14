@@ -3,7 +3,7 @@
   "train_ratio": 0.70,
   "val_ratio": 0.15,
 
-  "output_dir": "/group/jmearlesgrp/uchandar/agml-benchmarking/benchmark_outputs/",
+  "output_dir": "/group/jmearlesgrp/uchandar/agml-benchmarking/benchmark_results/",
 
   "embed_model": "facebook/dinov2-base",
   "embed_batch_size": 64,

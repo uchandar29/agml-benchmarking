@@ -57,14 +57,14 @@ def submit(cfg: dict, dry_run: bool) -> str:
 	job_name = f"agbenchmark_{short_name(name)}"
 
 	# Create the logs dir here so the sbatch --output path always exists
-	logs_dir = REPO_ROOT / "logs"
+	logs_dir = REPO_ROOT / "benchmark/logs"
 	logs_dir.mkdir(exist_ok=True)
 
 	cmd = [
 		"sbatch",
 		f"--job-name={job_name}",
 		f"--mem={cfg.get('mem', '32G')}",
-		f"--time={cfg.get('time', '12:00:00')}",
+		f"--time={cfg.get('time', '5:00:00')}",
 		f"--output={logs_dir}/%x_%j.out",
 		f"--error={logs_dir}/%x_%j.err",
 		str(SBATCH_SCRIPT),
@@ -86,7 +86,7 @@ def submit(cfg: dict, dry_run: bool) -> str:
 
 	print(f"  Dataset : {name}")
 	print(f"  Job     : {job_name}")
-	print(f"  Mem     : {cfg.get('mem', '32G')}   Time: {cfg.get('time', '12:00:00')}")
+	print(f"  Mem     : {cfg.get('mem', '32G')}   Time: {cfg.get('time', '5:00:00')}")
 
 	if dry_run:
 		print("  [dry-run — not submitted]\n")
