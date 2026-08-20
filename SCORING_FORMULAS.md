@@ -119,7 +119,7 @@ $$\boxed{Q_{diversity} = S_{diversity}}$$
 
 Non-linear decay — early noise matters more than marginal noise at the high end.
 
-$$S_{noise} = \text{clamp}\!\left(10 \times \left(1 - \frac{\text{noise\_rate}}{0.10}\right)^{1.5},\ 0,\ 10\right)$$
+$$S_{noise} = \text{clamp}\!\left(10 \times \left(\max\!\left(0,\ 1 - \frac{\text{noise\_rate}}{0.10}\right)\right)^{1.5},\ 0,\ 10\right)$$
 
 0% noise → 10. 5% noise → ~6.5. 10%+ noise → 0.  
 The exponent 1.5 prevents marginal gaming around the 10% boundary.
@@ -134,10 +134,10 @@ $$\boxed{Q_{annotation} = S_{noise}}$$
 
 Axis weights depend on which phases were run. Axes that require unavailable phases are excluded and their weight is redistributed equally across the remaining axes.
 
-| Phases run | Axes available | Weights |
-|------------|---------------|---------|
+| Phases run | Axes available | Effective weights (base / total) |
+|------------|---------------|----------------------------------|
 | Phase 1 only | Structural | 100% |
-| Phases 1 + 2 | Structural, Difficulty, Diversity | 34% / 33% / 33% |
+| Phases 1 + 2 | Structural, Difficulty, Diversity | 37.5% / 31.25% / 31.25%  (0.30 + 0.25 + 0.25 = 0.80) |
 | Phases 1 + 2 + 3 | All four | **30% / 25% / 25% / 20%** |
 
 $$\boxed{Q_{overall} = \frac{\sum_{i}\ w_i \cdot Q_i}{\sum_{i}\ w_i}}$$
@@ -196,13 +196,15 @@ function score(report) {
 
   // Annotation Reliability
   if (p3) {
-    axes.annotation = clamp(10 * Math.pow(1 - m.label_noise.estimated_noise_rate / 0.10, 1.5), 0, 10);
+    const base = Math.max(0, 1 - m.label_noise.estimated_noise_rate / 0.10);
+    axes.annotation = clamp(10 * Math.pow(base, 1.5), 0, 10);
   }
 
   // Overall
   const weights = { structural: 0.30, difficulty: 0.25, diversity: 0.25, annotation: 0.20 };
   let weightedSum = 0, totalWeight = 0;
   for (const [axis, score] of Object.entries(axes)) {
+    if (score == null || isNaN(score)) continue;
     weightedSum += score * weights[axis];
     totalWeight += weights[axis];
   }

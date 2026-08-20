@@ -204,7 +204,9 @@ class DatasetAdapter:
 
         dataset = dataset.add_column(self._COMPOUND_COL, int_values)
         dataset = dataset.cast_column(
-            self._COMPOUND_COL, HFClassLabel(names=unique_labels)
+            self._COMPOUND_COL,
+            HFClassLabel(names=unique_labels),
+            writer_batch_size=100,
         )
         return dataset
 
