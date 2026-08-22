@@ -1,8 +1,13 @@
 """
 DatasetAdapter
 ==============
-Loads a HuggingFace image-classification dataset and exposes a stable
-DatasetSchema regardless of how the underlying columns are named.
+Loads an image-classification dataset (HuggingFace or agml) and exposes a
+stable DatasetSchema regardless of how the underlying columns are named.
+
+Source routing
+--------------
+  iNatAg/<name> or iNatAg-mini/<name>  → agml.data.AgMLDataLoader
+  anything else                         → datasets.load_dataset (HuggingFace)
 
 Schema detection rules (applied in order; any rule can be overridden via
 constructor arguments):
@@ -65,33 +70,23 @@ class DatasetAdapter:
         self._dataset: Optional[Dataset] = None
         self._schema: Optional[DatasetSchema] = None
 
+    _AGML_PREFIXES = ("iNatAg/", "iNatAg-mini/")
+
     # Public API
     def load(self) -> Dataset:
         """
-        Download (or restore from HF cache) and return the raw dataset.
+        Download (or restore from cache) and return the raw dataset.
         Subsequent calls return the cached object without re-downloading.
+
+        iNatAg / iNatAg-mini datasets are loaded via agml; all others via HF.
         """
         if self._dataset is not None:
             return self._dataset
 
-        config = self._resolve_config_name()
-        tag = f" (config='{config}')" if config else ""
-        print(f"Loading '{self.dataset_name}'{tag} …")
-
-        raw = datasets.load_dataset(self.dataset_name, config)
-
-        if isinstance(raw, datasets.DatasetDict):
-            if "train" in raw:
-                dataset = raw["train"]
-            else:
-                first_key = next(iter(raw))
-                print(
-                    f"  ⚠  No 'train' split found in DatasetDict; "
-                    f"using '{first_key}' instead."
-                )
-                dataset = raw[first_key]
+        if any(self.dataset_name.startswith(p) for p in self._AGML_PREFIXES):
+            dataset = self._load_agml()
         else:
-            dataset = raw
+            dataset = self._load_hf()
 
         if self._compound_label_cols:
             dataset = self._create_compound_label(dataset)
@@ -102,6 +97,59 @@ class DatasetAdapter:
 
         print(f"  Loaded {len(dataset):,} examples.")
         return dataset
+
+    def _load_hf(self) -> Dataset:
+        config = self._resolve_config_name()
+        tag = f" (config='{config}')" if config else ""
+        print(f"Loading '{self.dataset_name}'{tag} …")
+
+        raw = datasets.load_dataset(self.dataset_name, config)
+
+        if isinstance(raw, datasets.DatasetDict):
+            if "train" in raw:
+                return raw["train"]
+            first_key = next(iter(raw))
+            print(
+                f"  ⚠  No 'train' split found in DatasetDict; "
+                f"using '{first_key}' instead."
+            )
+            return raw[first_key]
+        return raw
+
+    def _load_agml(self) -> Dataset:
+        """Load an iNatAg / iNatAg-mini dataset via agml and convert to HF Dataset.
+
+        Uses Dataset.from_generator() so images are written to Arrow one at a
+        time — memory usage stays bounded regardless of dataset size.
+        """
+        try:
+            import agml
+        except ImportError:
+            raise ImportError(
+                "agml is required for iNatAg datasets.  "
+                "Install with: pip install agml"
+            )
+
+        from PIL import Image as PILImage
+
+        print(f"Loading '{self.dataset_name}' via agml …")
+        loader = agml.data.AgMLDataLoader(self.dataset_name)
+        class_names: list[str] = list(loader.classes)
+
+        features = datasets.Features({
+            "image": datasets.Image(),
+            "label": datasets.ClassLabel(names=class_names),
+        })
+
+        def _gen():
+            for img_arr, label in loader:
+                # img_arr is already uint8 HWC; fromarray avoids an extra copy
+                yield {
+                    "image": PILImage.fromarray(img_arr),
+                    "label": int(label),
+                }
+
+        return Dataset.from_generator(_gen, features=features)
 
     def schema(self) -> DatasetSchema:
         """Return the resolved schema.  Raises if load() has not been called."""
@@ -170,7 +218,7 @@ class DatasetAdapter:
         from datasets import ClassLabel as HFClassLabel
 
         cols = self._compound_label_cols
-        missing = [c for c in cols if c not in dataset.features]
+        missing = [c for c in cols if c not in dataset.features] # pyright: ignore[reportOptionalIterable]
         if missing:
             raise ValueError(
                 f"compound_label_cols references columns not in dataset: {missing}.  "
@@ -202,12 +250,17 @@ class DatasetAdapter:
             f"{len(unique_labels)} classes: {unique_labels}"
         )
 
+        # Add the integer column, then update the feature schema to ClassLabel.
+        # We avoid cast() because it triggers a full Arrow rewrite over all
+        # columns including images, which overflows PyArrow's 2GB binary offset
+        # limit on large image datasets. ClassLabel is stored as int64 internally
+        # so no data transformation is needed — only the metadata changes.
+        import copy
         dataset = dataset.add_column(self._COMPOUND_COL, int_values)
-        dataset = dataset.cast_column(
-            self._COMPOUND_COL,
-            HFClassLabel(names=unique_labels),
-            writer_batch_size=100,
-        )
+        new_info = copy.deepcopy(dataset._info)  # type: ignore[attr-defined]
+        new_info.features[self._COMPOUND_COL] = HFClassLabel(names=unique_labels) # type: ignore
+        dataset._info = new_info  # type: ignore[attr-defined]
+
         return dataset
 
     def _detect_schema(self, dataset: Dataset) -> DatasetSchema:

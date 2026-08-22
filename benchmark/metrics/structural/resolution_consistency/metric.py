@@ -32,11 +32,14 @@ mode_distribution: {mode_str: count}       (e.g. {"RGB": 5472})
 
 from __future__ import annotations
 
+import io
 import statistics
 from collections import Counter
 from typing import Any, Dict, List
 
+import datasets
 from datasets import Dataset
+from PIL import Image as PILImage
 from tqdm import tqdm
 
 from benchmark.metrics.base import BaseMetric
@@ -55,18 +58,26 @@ class ResolutionConsistencyMetric(BaseMetric):
     ) -> Dict[str, Any]:
         image_col = schema.image_col
 
-        widths:  List[int]   = []
-        heights: List[int]   = []
-        modes:   List[str]   = []
+        widths:  List[int] = []
+        heights: List[int] = []
+        modes:   List[str] = []
+
+        # decode=False → HF returns raw bytes dicts instead of PIL images.
+        # PIL.Image.open() on the BytesIO stream reads only the image header
+        # (dimensions + mode) without decoding any pixel data, keeping memory
+        # usage near-zero even for 4K images.
+        raw_ds = full_dataset.cast_column(image_col, datasets.Image(decode=False))
 
         n = len(full_dataset)
         for start in tqdm(range(0, n, batch_size), desc="Measuring resolutions"):
-            batch = full_dataset[start: start + batch_size]
-            for img in batch[image_col]:
-                w, h = img.size          # header-only read; no full decode
-                widths.append(w)
-                heights.append(h)
-                modes.append(img.mode)
+            batch = raw_ds[start: start + batch_size]
+            for img_dict in batch[image_col]:
+                raw_bytes = img_dict.get("bytes") or open(img_dict["path"], "rb").read()
+                with PILImage.open(io.BytesIO(raw_bytes)) as img:
+                    w, h = img.size   # header-only; no pixel decode
+                    widths.append(w)
+                    heights.append(h)
+                    modes.append(img.mode)
 
         aspect_ratios = [w / h for w, h in zip(widths, heights)]
         areas         = [w * h for w, h in zip(widths, heights)]

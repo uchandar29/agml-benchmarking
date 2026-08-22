@@ -15,6 +15,7 @@ import argparse
 import os
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 try:
@@ -56,9 +57,9 @@ def submit(cfg: dict, dry_run: bool) -> str:
 	name     = cfg["name"]
 	job_name = f"agbenchmark_{short_name(name)}"
 
-	# Create the logs dir here so the sbatch --output path always exists
-	logs_dir = REPO_ROOT / "benchmark/logs"
-	logs_dir.mkdir(exist_ok=True)
+	# Create a date-stamped logs subdirectory for this submission run
+	logs_dir = REPO_ROOT / "benchmark/logs" / date.today().isoformat()
+	logs_dir.mkdir(parents=True, exist_ok=True)
 
 	cmd = [
 		"sbatch",

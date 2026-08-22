@@ -7,6 +7,7 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
+#SBATCH --exclude=gpu-12-92
 # --output and --error are set by submit_all.py using absolute paths
 
 # ── How this script is driven ─────────────────────────────────────────────────
