@@ -1,13 +1,9 @@
 # AgML Benchmark Dataset Config
 # ─────────────────────────────────────────────────────────────────────────────
-# All fields under `defaults` are inherited by every dataset entry.
-# Override any field per-dataset by specifying it directly under that entry.
-#
 # Fields:
-#   name                 HuggingFace dataset path (required)
+#   name                 Dataset path — HuggingFace (Project-AgML/...) or
+#                        agml (iNatAg/... or iNatAg-mini/...)    [required]
 #   phases               Space-separated phase numbers to run
-#   time                 SLURM wall-clock limit (HH:MM:SS)
-#   mem                  SLURM memory allocation
 #   hf_config_name       HF dataset config name (e.g. "raw")
 #   label_col            Column containing class labels
 #   image_col            Column containing images
@@ -16,19 +12,15 @@
 
 defaults:
     phases: "1 2 3"
-    time: "5:00:00"
-    mem: "32G"
+    hf_config_name: ""
     label_col: "label"
     image_col: "image"
-    hf_config_name: ""
     compound_label_cols: []
 
 datasets:
     - name: "Project-AgML/watermelon_disease_classification"
       hf_config_name: "raw"
 
-    # Example — compound labels and custom resources:
+    # Example — compound labels:
     # - name: "Project-AgML/bruised_vegetable_classification"
     #   compound_label_cols: ["crop_type", "label"]
-    #   time: "24:00:00"
-    #   mem: "64G"
