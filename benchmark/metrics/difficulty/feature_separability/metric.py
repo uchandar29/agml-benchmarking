@@ -76,6 +76,14 @@ class FeatureSeparabilityMetric(BaseMetric):
                 "Install with:  pip install scikit-learn"
             )
 
+        # Silhouette and Davies-Bouldin require at least 2 classes
+        if schema.num_classes < 2:
+            return {
+                "skipped": True,
+                "reason": f"Feature separability requires ≥ 2 classes; dataset has {schema.num_classes}.",
+                "embed_model": embed_model,
+            }
+
         N = len(embeddings)
         rng = np.random.default_rng(seed)
 

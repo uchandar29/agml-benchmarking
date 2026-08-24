@@ -61,29 +61,31 @@ def _flush(*args, **kwargs):
     print(*args, **kwargs, flush=True)
 
 
-def _dataset_header(index: int, total: int, name: str) -> None:
+def _dataset_header(index: int, total: int, name: str, phases: list, report_path: str) -> None:
     _flush()
     _flush(THICK * WIDE)
-    _flush(f"  Dataset [{index}/{total}]  {name}")
-    _flush(f"  Started: {_ts()}")
+    _flush(f"{'AgML Benchmark Pipeline':^{WIDE}}")
+    _flush(f"  Dataset [{index}/{total}]: {name}")
+    _flush(f"  Started : {_ts()}")
+    _flush(f"  Phases  : {phases}")
+    _flush(f"  Report  : {report_path}")
+    _flush()
+    _flush(f"{'─' * 19} BENCHMARKING LOGS {'─' * 19}")
+    _flush()
+
+
+def _dataset_footer() -> None:
+    _flush()
     _flush(THICK * WIDE)
+    _flush()
 
 
-def _dataset_success(name: str, report_path: str, elapsed: float) -> None:
-    _flush()
-    _flush(THIN * WIDE)
-    _flush(f"  ✓  {name}")
-    _flush(f"     report  : {report_path}")
-    _flush(f"     elapsed : {elapsed:.0f}s")
-    _flush(THIN * WIDE)
-    _flush()
+def _dataset_success(name: str, elapsed: float) -> None:
+    pass  # footer separator is enough; summary at the end covers results
 
 
 def _dataset_failure(name: str, elapsed: float) -> None:
-    _flush()
-    _flush(THIN * WIDE)
     _flush(f"  ✗  {name}  (failed after {elapsed:.0f}s — see stderr for traceback)")
-    _flush(THIN * WIDE)
     _flush()
 
 
@@ -149,7 +151,6 @@ def run_all(yaml_path: Path) -> None:
             continue
 
         cfg = resolve_entry(defaults, entry)
-        _dataset_header(index, total, dataset_name)
 
         start = datetime.now()
         try:
@@ -160,11 +161,18 @@ def run_all(yaml_path: Path) -> None:
                 image_col           = cfg.get("image_col"),
                 compound_label_cols = cfg["compound_label_cols"],
                 cfg                 = pipeline_cfg,
+                show_banner         = False,
             )
-            report_path = pipeline.run(phases=cfg["phases"])
+
+            # Resolve report path before run() so we can show it in the header
+            path = pipeline.report_path()
+            _dataset_header(index, total, dataset_name, cfg["phases"], path)
+
+            pipeline.run(phases=cfg["phases"])
             elapsed = (datetime.now() - start).total_seconds()
 
-            _dataset_success(dataset_name, report_path, elapsed)
+            _dataset_footer()
+            _dataset_success(dataset_name, elapsed)
             succeeded.append(dataset_name)
 
         except Exception:
@@ -175,6 +183,7 @@ def run_all(yaml_path: Path) -> None:
             traceback.print_exc(file=sys.stderr)
             print(file=sys.stderr, flush=True)
 
+            _dataset_footer()
             _dataset_failure(dataset_name, elapsed)
             failed.append(dataset_name)
 
