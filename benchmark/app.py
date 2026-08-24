@@ -313,12 +313,15 @@ class AgMLBenchmarkPipeline:
                 max_silhouette_samples=self.cfg.max_silhouette_samples,
             )
             writer.add("feature_separability", result)
-            print(
-                f"  [✓] feature_separability   "
-                f"silhouette={result['silhouette_score']}  "
-                f"({result['silhouette_interpretation']})  "
-                f"davies_bouldin={result['davies_bouldin_index']}"
-            )
+            if result.get("skipped"):
+                print(f"  [–] feature_separability   skipped ({result['reason']})")
+            else:
+                print(
+                    f"  [✓] feature_separability   "
+                    f"silhouette={result['silhouette_score']}  "
+                    f"({result['silhouette_interpretation']})  "
+                    f"davies_bouldin={result['davies_bouldin_index']}"
+                )
 
             result = IntraClassDiversityMetric().run(
                 embeddings=embeddings,
