@@ -15,7 +15,8 @@
 module load cuda/12
 
 export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
-export HF_HOME=/group/jmearlesgrp/$USER/hf
+export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
+export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 
 # REPO_ROOT is injected by submit_job.py.
 # For a manual one-off submission from the repo root:

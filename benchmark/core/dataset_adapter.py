@@ -132,8 +132,13 @@ class DatasetAdapter:
 
         from PIL import Image as PILImage
 
+        import os
+        cache_dir = os.environ.get("AGML_DATA_DIR")
         print(f"Loading '{self.dataset_name}' via agml …")
-        loader = agml.data.AgMLDataLoader(self.dataset_name)
+        loader = agml.data.AgMLDataLoader(
+            self.dataset_name,
+            **({"dataset_path": cache_dir} if cache_dir else {}),
+        )
         class_names: list[str] = list(loader.classes)
 
         features = datasets.Features({

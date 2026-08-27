@@ -78,7 +78,7 @@ class ExactDuplicateMetric(BaseMetric):
         for start in tqdm(range(0, n, batch_size), desc="Hashing images (exact)"):
             batch = full_dataset[start: start + batch_size]
             images       = list(batch[image_col])
-            orig_indices = list(batch["_orig_idx"])
+            orig_indices = list(range(start, start + len(images)))
 
             for img, orig_idx in zip(images, orig_indices):
                 digest = hashlib.md5(img.tobytes()).hexdigest()

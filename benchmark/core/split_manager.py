@@ -9,16 +9,17 @@ Design notes
 • We never rely on pre-existing HF train/val/test splits.  Every dataset is
   split from scratch using the same fixed ratios and seed.
 
-• A synthetic '_orig_idx' column (0 … N-1) is added to the dataset before
-  splitting.  All returned Dataset objects carry this column so that any
-  downstream metric can map a sample back to its position in the full dataset
-  and determine which split it belongs to — without relying on HF internals.
+• Split indices are computed with sklearn's StratifiedShuffleSplit — pure
+  numpy, no Arrow I/O.  HF Dataset.select() is then used to build each
+  subset lazily (no data is copied).
 
-• Split indices are written to splits.json in the run output directory so
-  that every pipeline run is fully reproducible.
+• A '_orig_idx' column is added to each split so that downstream metrics
+  can trace any sample back to its row in the full dataset.  The full
+  dataset itself does not need this column (embedding_engine iterates
+  it in row order).
 
-• If stratified splitting fails for a class (e.g. the class has only 1
-  sample), we fall back to a non-stratified split and log a warning.
+• If stratified splitting fails (e.g. a class has only 1 sample), we fall
+  back to a random split and log a warning.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
 from datasets import Dataset
 
 
@@ -34,10 +36,10 @@ from datasets import Dataset
 @dataclass
 class SplitResult:
     """Holds all four views of the dataset after splitting."""
-    full: Dataset    # Complete dataset with '_orig_idx' column
-    train: Dataset
-    val: Dataset
-    test: Dataset
+    full: Dataset    # Original dataset, no extra columns added
+    train: Dataset   # Has '_orig_idx' column
+    val: Dataset     # Has '_orig_idx' column
+    test: Dataset    # Has '_orig_idx' column
 
 
 # ---------------------------- Manager ----------------------------
@@ -81,31 +83,15 @@ class SplitManager:
         -------
         SplitResult with .full / .train / .val / .test
         """
-        # Attach original index so every downstream metric can trace samples
-        dataset_with_idx = dataset.add_column(
-            "_orig_idx", list(range(len(dataset)))
-        )
+        labels = np.array(dataset[label_col])
+        N = len(labels)
 
-        # ---------------------------- Step 1: train (70%) vs temp (30%) ----------------------------
-        temp_ratio = 1.0 - self.train_ratio   # 0.30
-        split1 = self._stratified_split(
-            dataset_with_idx,
-            test_size=temp_ratio,
-            label_col=label_col,
-        )
-        train_ds = split1["train"]
-        temp_ds  = split1["test"]
+        train_idx, val_idx, test_idx = self._compute_indices(labels, N)
 
-        # ---------------------------- Step 2: val (15%) vs test (15%) from the temp 30% ----------------------------
-        # Within the 30% temp block, val takes 50% → 15% of total
-        val_fraction_of_temp = self.val_ratio / temp_ratio   # 0.50
-        split2 = self._stratified_split(
-            temp_ds,
-            test_size=1.0 - val_fraction_of_temp,
-            label_col=label_col,
-        )
-        val_ds  = split2["train"]
-        test_ds = split2["test"]
+        # select() is lazy — no Arrow copy, just an index mapping
+        train_ds = dataset.select(train_idx).add_column("_orig_idx", train_idx.tolist())
+        val_ds   = dataset.select(val_idx).add_column("_orig_idx", val_idx.tolist())
+        test_ds  = dataset.select(test_idx).add_column("_orig_idx", test_idx.tolist())
 
         os.makedirs(output_dir, exist_ok=True)
 
@@ -118,37 +104,63 @@ class SplitManager:
         )
 
         return SplitResult(
-            full=dataset_with_idx,
+            full=dataset,
             train=train_ds,
             val=val_ds,
             test=test_ds,
         )
 
     # ---------------------------- Internal helpers ----------------------------
-    def _stratified_split(
+    def _compute_indices(
         self,
-        dataset: Dataset,
-        test_size: float,
-        label_col: str,
-    ) -> dict:
+        labels: np.ndarray,
+        N: int,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Attempt a stratified split; fall back to a random split if any class
-        has too few examples for stratification to succeed.
+        Compute stratified train / val / test indices using sklearn.
+        Falls back to random if any class is too small for stratification.
         """
+        from sklearn.model_selection import StratifiedShuffleSplit
+
+        temp_ratio = 1.0 - self.train_ratio  # 0.30
+
+        # Step 1: train vs temp
         try:
-            return dataset.train_test_split(
-                test_size=test_size,
-                stratify_by_column=label_col,
-                seed=self.seed,
+            sss1 = StratifiedShuffleSplit(
+                n_splits=1, test_size=temp_ratio, random_state=self.seed
             )
-        except Exception as exc:
+            train_idx, temp_idx = next(sss1.split(np.zeros(N), labels))
+        except ValueError as exc:
             print(
                 f"  ⚠  Stratified split failed ({exc}).  "
                 f"Falling back to a random split — class distribution may be "
                 f"uneven across splits."
             )
-            return dataset.train_test_split(
-                test_size=test_size,
-                seed=self.seed,
-            )
+            rng = np.random.default_rng(self.seed)
+            perm = rng.permutation(N)
+            n_train = int(round(N * self.train_ratio))
+            train_idx = perm[:n_train]
+            temp_idx  = perm[n_train:]
 
+        # Step 2: val vs test from temp
+        temp_labels = labels[temp_idx]
+        n_temp = len(temp_idx)
+        val_frac = self.val_ratio / temp_ratio  # 0.50
+
+        try:
+            sss2 = StratifiedShuffleSplit(
+                n_splits=1, test_size=1.0 - val_frac, random_state=self.seed
+            )
+            val_rel, test_rel = next(sss2.split(np.zeros(n_temp), temp_labels))
+        except ValueError:
+            rng = np.random.default_rng(self.seed + 1)
+            perm = rng.permutation(n_temp)
+            n_val = int(round(n_temp * val_frac))
+            val_rel  = perm[:n_val]
+            test_rel = perm[n_val:]
+
+        return (
+            np.sort(train_idx),
+            np.sort(temp_idx[val_rel]),
+            np.sort(temp_idx[test_rel]),
+        )

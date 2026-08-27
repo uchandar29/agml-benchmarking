@@ -40,10 +40,17 @@ class ReportWriter:
         print(writer.path())   # path to the JSON file
     """
 
+    _PRESERVE_PREFIXES = ("iNatAg/", "iNatAg-mini/")
+
     def __init__(self, dataset_name: str, output_dir: str = "results") -> None:
-        # Strip org prefix (e.g. "Project-AgML/") and sanitise for filesystem
-        bare_name = dataset_name.split("/")[-1]
-        safe_name = bare_name.replace("\\", "_")
+        # For iNatAg datasets keep the prefix as a subdirectory;
+        # for everything else (e.g. "Project-AgML/rice_...") strip the org prefix.
+        if any(dataset_name.startswith(p) for p in self._PRESERVE_PREFIXES):
+            prefix, bare_name = dataset_name.split("/", 1)
+            safe_name = os.path.join(prefix, bare_name.replace("\\", "_"))
+        else:
+            bare_name = dataset_name.split("/")[-1]
+            safe_name = bare_name.replace("\\", "_")
 
         now = datetime.now(tz=timezone.utc)
         self._run_ts  = now.strftime("%Y%m%d_%H%M%S")

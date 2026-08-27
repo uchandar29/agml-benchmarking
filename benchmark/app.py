@@ -352,7 +352,10 @@ class AgMLBenchmarkPipeline:
         # ── Phase 3 ───────────────────────────────────────────────────────────
         if 3 in phases and schema.num_classes < 2:
             print("\n── Phase 3: Skipped — requires ≥ 2 classes ──\n")
-            writer.add("phase_3_skipped", {"reason": f"Dataset has only {schema.num_classes} class — Phase 3 metrics require ≥ 2."})
+            skip_reason = f"Dataset has only {schema.num_classes} class — Phase 3 metrics require ≥ 2."
+            writer.add("dataset_cartography",  {"skipped": True, "reason": skip_reason})
+            writer.add("class_confusability",  {"skipped": True, "reason": skip_reason})
+            writer.add("label_noise",          {"skipped": True, "reason": skip_reason})
             writer.complete_phase(3)
 
         if 3 in phases and schema.num_classes >= 2:
@@ -432,9 +435,7 @@ class AgMLBenchmarkPipeline:
 
             writer.complete_phase(3)
 
-        print(f"\n{'─' * 60}")
-        print(f"  Report → {writer.path()}")
-        print(f"{'─' * 60}\n")
+        print(f"\n  ✓ Successfully generated report at: {writer.path()}")
 
         return writer.path()
 
