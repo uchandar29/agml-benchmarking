@@ -18,6 +18,7 @@ Usage (from repo root, or via SLURM):
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 import traceback
 from datetime import datetime
@@ -182,6 +183,18 @@ def run_all(yaml_path: Path) -> None:
             print(f"\n[ERROR] {dataset_name}  ({_ts()})", file=sys.stderr, flush=True)
             traceback.print_exc(file=sys.stderr)
             print(file=sys.stderr, flush=True)
+
+            # Remove the incomplete run directory so no partial data lingers
+            run_dir = Path(path).parent
+            if run_dir.exists():
+                shutil.rmtree(run_dir)
+                print(f"  Removed incomplete run dir: {run_dir}", file=sys.stderr, flush=True)
+
+            # Also remove the dataset parent dir if it's now empty
+            dataset_dir = run_dir.parent
+            if dataset_dir.exists() and not any(dataset_dir.iterdir()):
+                dataset_dir.rmdir()
+                print(f"  Removed empty dataset dir: {dataset_dir}", file=sys.stderr, flush=True)
 
             _dataset_footer()
             _dataset_failure(dataset_name, elapsed)
