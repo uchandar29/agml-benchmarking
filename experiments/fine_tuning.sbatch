@@ -23,6 +23,7 @@ module load cuda/12
 export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
 export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
 export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
+export TORCH_HOME=/group/jmearlesgrp/uchandar/.cache/torch
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 

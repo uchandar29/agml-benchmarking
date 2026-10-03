@@ -2,7 +2,7 @@
 # YAML does not allow tabs, so this file uses 4 spaces per level.
 
 shared:
-    output_root: /group/jmearlesgrp/uchandar/agml-benchmarking/experiment/results
+    output_root: /group/jmearlesgrp/uchandar/agml-benchmarking/experiments/results
     training_seed: 42
     dataloader_workers: 8
     # Must match benchmark/configs/config.json so test splits line up with the quality scores
