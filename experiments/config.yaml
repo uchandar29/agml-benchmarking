@@ -1,0 +1,81 @@
+# Shared configuration for Experiment 1 (fine-tuning) and Experiment 2 (zero-shot).
+# YAML does not allow tabs, so this file uses 4 spaces per level.
+
+shared:
+    output_root: /group/jmearlesgrp/uchandar/agml-benchmarking/experiment/results
+    training_seed: 42
+    dataloader_workers: 8
+    # Must match benchmark/configs/config.json so test splits line up with the quality scores
+    split:
+        seed: 42
+        train_ratio: 0.70
+        val_ratio: 0.15
+
+dataset_defaults:
+    label_column: "label"
+    image_column: "image"
+    hf_config_name: ""
+    compound_label_columns: []
+
+datasets:
+    - name: "Project-AgML/banana_leaf_nutrient_classification"
+    - name: "Project-AgML/AgriVision4_disease_classification"
+      compound_label_columns: ["crop", "label"]
+    - name: "Project-AgML/CoLeaf_nutritional_deficiency_classification"
+    - name: "Project-AgML/eggplant_disease_classification"
+    - name: "Project-AgML/grapevine_disease_classification"
+      compound_label_columns: ["label", "grape_variety"]
+    - name: "Project-AgML/bacterial_grain_rot_classification"
+    - name: "Project-AgML/DIMPSAR_medicinal_leaf_classification"
+    - name: "Project-AgML/cotton_leaf_disease_classification"
+    - name: "Project-AgML/COLD_chili_leaf_disease_classification"
+    - name: "Project-AgML/guava_disease_pakistan"
+    - name: "Project-AgML/FruitVision_quality_classification"
+      compound_label_columns: ["label", "fruit"]
+    - name: "Project-AgML/durian_disease_classification"
+    - name: "Project-AgML/corn_maize_leaf_disease"
+    - name: "Project-AgML/banana_variety_classification"
+    - name: "Project-AgML/fig_leaf_ficus_worm_classification"
+    - name: "Project-AgML/BDMediLeaves_variety_classification"
+    - name: "Project-AgML/greenhouse_crop_weed_classification"
+    - name: "Project-AgML/fresh_rotten_fruit_classification"
+      compound_label_columns: ["label", "fruit_type"]
+    - name: "Project-AgML/bean_disease_uganda"
+    - name: "Project-AgML/grapevine_esca_classification"
+
+fine_tuning:
+    experiment_name: "fine_tuning"
+    image_size: 224
+    batch_size: 64
+    max_epochs: 50
+    early_stopping_patience: 10
+    early_stopping_min_delta: 0.0
+    learning_rate: 5.0e-5
+    weight_decay: 0.05
+    warmup_epochs: 2
+    gradient_clip_norm: 1.0
+    mixed_precision: true
+    save_best_checkpoint: false
+    skip_completed_runs: true
+    augmentation:
+        horizontal_flip_probability: 0.5
+        random_crop_scale: [0.8, 1.0]
+        color_jitter:
+            brightness: 0.2
+            contrast: 0.2
+            saturation: 0.2
+            hue: 0.02
+    # Any key above (learning_rate, batch_size, ...) can be overridden per model
+    models:
+        - name: "vit_small"
+          timm_model: "vit_small_patch16_224.augreg_in21k_ft_in1k"
+        - name: "dinov2_small"
+          timm_model: "vit_small_patch14_dinov2.lvd142m"
+
+zero_shot:
+    experiment_name: "zero_shot"
+    # Model ids and prompt settings get filled in when Experiment 2 is built
+    models:
+        - name: "siglip_so400m"
+        - name: "gemma_4"
+        - name: "qwen_3_5"
