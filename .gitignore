@@ -199,3 +199,6 @@ pip-selfcheck.json
 # Program generated files
 benchmark/logs
 benchmark_results/
+
+# CLAUDE Context 
+CLAUDE.md

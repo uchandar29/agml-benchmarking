@@ -347,6 +347,7 @@ class AgMLBenchmarkPipeline:
                 val_idx=val_idx,
                 test_idx=test_idx,
                 run_dir=writer.run_dir,
+                dataset_name=self.dataset_name,
             )
 
         # ── Phase 3 ───────────────────────────────────────────────────────────
