@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
+import numpy as np
 from datasets import Dataset
 
 from benchmark.core.dataset_adapter import DatasetAdapter, DatasetSchema
@@ -37,7 +38,6 @@ class PreparedDataset:
 def prepare_dataset(
 	dataset_entry: DatasetEntry,
 	split_settings: Dict[str, Any],
-	split_output_dir: str,
 ) -> PreparedDataset:
 	adapter = DatasetAdapter(
 		dataset_name=dataset_entry.name,
@@ -54,7 +54,21 @@ def prepare_dataset(
 		val_ratio=split_settings["val_ratio"],
 		seed=split_settings["seed"],
 	)
-	splits = split_manager.split(full_dataset, schema.label_col, split_output_dir)
+	# Same indices as SplitManager.split(), but without its add_column("_orig_idx") step.
+	# That step rewrites the selected images into a new Arrow table and overflows the
+	# 2GB binary limit on datasets with large images. select() alone is a lazy index map.
+	labels = np.array(full_dataset[schema.label_col])
+	train_indices, val_indices, test_indices = split_manager._compute_indices(labels, len(labels))
+	splits = SplitResult(
+		full=full_dataset,
+		train=full_dataset.select(train_indices),
+		val=full_dataset.select(val_indices),
+		test=full_dataset.select(test_indices),
+	)
+	print(
+		f"Split complete  train={len(train_indices):,}  val={len(val_indices):,}  "
+		f"test={len(test_indices):,}  (seed={split_settings['seed']})"
+	)
 	return PreparedDataset(entry=dataset_entry, schema=schema, splits=splits)
 
 

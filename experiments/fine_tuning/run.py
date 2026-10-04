@@ -185,7 +185,7 @@ def prefetch_everything(dataset_entries, model_settings_list, shared_settings, e
 		download_pretrained_weights(model_settings["timm_model"])
 	for dataset_entry in dataset_entries:
 		log(f"Caching dataset {dataset_entry.name}")
-		prepare_dataset(dataset_entry, shared_settings["split"], str(experiment_output_dir / dataset_entry.short_name))
+		prepare_dataset(dataset_entry, shared_settings["split"])
 	log("Prefetch complete.")
 
 
@@ -230,7 +230,7 @@ def main() -> None:
 		log("=" * 70)
 		log(f"[{dataset_position}/{len(dataset_entries)}] {dataset_entry.name}  ({timestamp()})")
 		try:
-			prepared_dataset = prepare_dataset(dataset_entry, shared_settings["split"], str(dataset_output_dir))
+			prepared_dataset = prepare_dataset(dataset_entry, shared_settings["split"])
 		except Exception:
 			print(f"\n[ERROR] loading {dataset_entry.name}", file=sys.stderr, flush=True)
 			traceback.print_exc(file=sys.stderr)
