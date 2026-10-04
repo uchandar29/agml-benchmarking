@@ -6,7 +6,7 @@ pipeline, so experiment results line up with the quality scores row for row.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Tuple
 
 import numpy as np
 from datasets import Dataset
@@ -35,10 +35,8 @@ class PreparedDataset:
 		}
 
 
-def prepare_dataset(
-	dataset_entry: DatasetEntry,
-	split_settings: Dict[str, Any],
-) -> PreparedDataset:
+def load_dataset_with_schema(dataset_entry: DatasetEntry) -> Tuple[Dataset, DatasetSchema]:
+	"""Downloads the dataset into the HF cache (or reads it from there) and resolves its columns."""
 	adapter = DatasetAdapter(
 		dataset_name=dataset_entry.name,
 		config_name=dataset_entry.hf_config_name,
@@ -47,7 +45,14 @@ def prepare_dataset(
 		compound_label_cols=dataset_entry.compound_label_columns,
 	)
 	full_dataset = adapter.load()
-	schema = adapter.schema()
+	return full_dataset, adapter.schema()
+
+
+def prepare_dataset(
+	dataset_entry: DatasetEntry,
+	split_settings: Dict[str, Any],
+) -> PreparedDataset:
+	full_dataset, schema = load_dataset_with_schema(dataset_entry)
 
 	split_manager = SplitManager(
 		train_ratio=split_settings["train_ratio"],

@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 from experiments.common import (
 	ImageClassificationDataset,
 	PreparedDataset,
+	load_dataset_with_schema,
 	load_experiment_config,
 	parse_dataset_entries,
 	prepare_dataset,
@@ -179,13 +180,14 @@ def run_single_model(
 	return run_result
 
 
-def prefetch_everything(dataset_entries, model_settings_list, shared_settings, experiment_output_dir: Path) -> None:
+def prefetch_everything(dataset_entries, model_settings_list) -> None:
+	# Only fills the HF cache. Splitting happens later, inside the training run.
 	for model_settings in model_settings_list:
 		log(f"Downloading weights for {model_settings['name']} ({model_settings['timm_model']})")
 		download_pretrained_weights(model_settings["timm_model"])
 	for dataset_entry in dataset_entries:
 		log(f"Caching dataset {dataset_entry.name}")
-		prepare_dataset(dataset_entry, shared_settings["split"])
+		load_dataset_with_schema(dataset_entry)
 	log("Prefetch complete.")
 
 
@@ -207,7 +209,7 @@ def main() -> None:
 	log()
 
 	if arguments.prefetch_only:
-		prefetch_everything(dataset_entries, model_settings_list, shared_settings, experiment_output_dir)
+		prefetch_everything(dataset_entries, model_settings_list)
 		return
 
 	completed_runs, skipped_runs, failed_runs = [], [], []
