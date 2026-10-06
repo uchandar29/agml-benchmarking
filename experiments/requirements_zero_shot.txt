@@ -1,0 +1,8 @@
+# Separate environment for Experiment 2, since vLLM brings its own torch build.
+# Data side: datasets, agml, Pillow, scikit-learn, PyYAML, tqdm (as in benchmark/requirements.txt, faiss not needed).
+# Gemma 4 needs transformers 5.5 or later, Qwen 3.5 needs 5.2 or later.
+# vLLM 0.19 and older pin transformers below 5, so use a recent release (0.29 or later lists Gemma 4 and Qwen 3.5 work).
+# FP8 weights need an Ada or Hopper GPU.
+vllm>=0.29.0
+transformers>=5.5.0
+huggingface_hub

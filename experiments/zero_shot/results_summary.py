@@ -8,13 +8,13 @@ from typing import Any, Dict, List
 from experiments.common.output_files import write_json
 
 SUMMARY_COLUMNS = [
-	"dataset", "model", "macro_f1", "weighted_f1", "accuracy",
-	"best_epoch", "epochs_completed", "train_size", "val_size", "test_size", "number_of_classes",
+	"dataset", "model", "accuracy", "macro_f1", "weighted_f1",
+	"invalid_predictions", "test_size", "number_of_classes",
 ]
 
 
 def rebuild_summary(experiment_output_dir: Path) -> Path:
-	"""Collects every run_result.json under the experiment folder, so resumed jobs still give one summary."""
+	"""Collects every run_result.json under the experiment folder into one summary."""
 	summary_rows: List[Dict[str, Any]] = []
 	for result_path in sorted(experiment_output_dir.glob("*/*/run_result.json")):
 		with open(result_path) as result_file:
@@ -22,14 +22,11 @@ def rebuild_summary(experiment_output_dir: Path) -> Path:
 		summary_rows.append({
 			"dataset": run_result["dataset"],
 			"model": run_result["model"]["name"],
+			"accuracy": run_result["test_metrics"]["accuracy"],
 			"macro_f1": run_result["test_metrics"]["macro_f1"],
 			"weighted_f1": run_result["test_metrics"]["weighted_f1"],
-			"accuracy": run_result["test_metrics"]["accuracy"],
-			"best_epoch": run_result["training"]["best_epoch"],
-			"epochs_completed": run_result["training"]["epochs_completed"],
-			"train_size": run_result["split_sizes"]["train"],
-			"val_size": run_result["split_sizes"]["val"],
-			"test_size": run_result["split_sizes"]["test"],
+			"invalid_predictions": run_result["invalid_predictions"],
+			"test_size": run_result["test_metrics"]["number_of_test_samples"],
 			"number_of_classes": run_result["number_of_classes"],
 		})
 

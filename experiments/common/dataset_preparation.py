@@ -21,6 +21,8 @@ class PreparedDataset:
 	entry: DatasetEntry
 	schema: DatasetSchema
 	splits: SplitResult
+	# Row numbers in the full dataset, same numbering as the benchmark's _orig_idx
+	split_indices: Dict[str, np.ndarray]
 
 	@property
 	def class_names(self):
@@ -74,7 +76,12 @@ def prepare_dataset(
 		f"Split complete  train={len(train_indices):,}  val={len(val_indices):,}  "
 		f"test={len(test_indices):,}  (seed={split_settings['seed']})"
 	)
-	return PreparedDataset(entry=dataset_entry, schema=schema, splits=splits)
+	return PreparedDataset(
+		entry=dataset_entry,
+		schema=schema,
+		splits=splits,
+		split_indices={"train": train_indices, "val": val_indices, "test": test_indices},
+	)
 
 
 class ImageClassificationDataset:

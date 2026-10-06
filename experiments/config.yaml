@@ -74,8 +74,37 @@ fine_tuning:
 
 zero_shot:
     experiment_name: "zero_shot"
-    # Model ids and prompt settings get filled in when Experiment 2 is built
+    skip_completed_runs: true
+    # Saves one row per test image (dataset_row, true_label, predicted_label) for later analysis
+    save_predictions: true
+    # Same prompt for both chat models. {class_list} becomes one "- class name" line per class.
+    vision_language_prompt: |
+        This image comes from an agricultural image classification dataset.
+        Which one of these classes does the image show?
+        {class_list}
+        Answer with the class name only.
     models:
         - name: "siglip_so400m"
-        - name: "gemma_4"
-        - name: "qwen_3_5"
+          model_type: "siglip"
+          model_id: "google/siglip-so400m-patch14-384"
+          batch_size: 64
+          # Text embeddings are averaged over these templates for each class
+          text_templates:
+              - "a photo of {class_name}."
+              - "an agricultural photo of {class_name}."
+        # 31B weights in FP8 (about 33GB), fits one 48GB GPU
+        - name: "gemma_4_31b"
+          model_type: "vision_language_model"
+          model_id: "RedHatAI/gemma-4-31B-it-FP8-dynamic"
+          batch_size: 32
+          max_model_len: 8192
+          gpu_memory_utilization: 0.9
+          max_image_side: 896
+        # Qwen 3.5 has no 31B size, 27B is the closest dense model (official FP8, about 29GB)
+        - name: "qwen_3_5_27b"
+          model_type: "vision_language_model"
+          model_id: "Qwen/Qwen3.5-27B-FP8"
+          batch_size: 32
+          max_model_len: 8192
+          gpu_memory_utilization: 0.95
+          max_image_side: 896

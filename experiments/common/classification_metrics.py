@@ -10,7 +10,7 @@ def compute_classification_metrics(
 	predicted_labels: Sequence[int],
 	class_names: List[str],
 ) -> Dict[str, Any]:
-	from sklearn.metrics import accuracy_score, f1_score
+	from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
 
 	true_labels = np.asarray(true_labels)
 	predicted_labels = np.asarray(predicted_labels)
@@ -32,4 +32,5 @@ def compute_classification_metrics(
 			class_name: round(float(score), 4)
 			for class_name, score in zip(class_names, per_class_f1)
 		},
+		"confusion_matrix": confusion_matrix(true_labels, predicted_labels, labels=class_indices).tolist(),
 	}

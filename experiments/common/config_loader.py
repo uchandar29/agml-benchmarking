@@ -19,6 +19,7 @@ class DatasetEntry:
 	image_column: Optional[str] = None
 	hf_config_name: Optional[str] = None
 	compound_label_columns: Optional[List[str]] = None
+	class_name_overrides: Optional[Dict[str, str]] = None
 
 	@property
 	def short_name(self) -> str:
@@ -50,6 +51,7 @@ def parse_dataset_entries(
 			image_column=merged_entry.get("image_column") or None,
 			hf_config_name=merged_entry.get("hf_config_name") or None,
 			compound_label_columns=merged_entry.get("compound_label_columns") or None,
+			class_name_overrides=merged_entry.get("class_name_overrides") or None,
 		))
 
 	if not selected_dataset_names:

@@ -27,14 +27,15 @@ from experiments.common import (
 	set_global_seed,
 )
 from experiments.common.reproducibility import seed_dataloader_worker
-from experiments.fine_tuning.evaluation import compute_classification_metrics
+from experiments.common.classification_metrics import compute_classification_metrics
+from experiments.common.output_files import write_json
 from experiments.fine_tuning.image_transforms import build_evaluation_transform, build_training_transform
 from experiments.fine_tuning.model_factory import (
 	build_classifier,
 	download_pretrained_weights,
 	get_normalization_statistics,
 )
-from experiments.fine_tuning.results_summary import rebuild_summary, write_json
+from experiments.fine_tuning.results_summary import rebuild_summary
 from experiments.fine_tuning.trainer import FineTuningTrainer
 
 
