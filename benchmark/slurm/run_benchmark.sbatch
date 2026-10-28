@@ -19,7 +19,9 @@
 
 module load cuda/12
 
-export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
+# The repo is not a uv project, so activate the environment directly
+PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
+source "$PYTHON_ENVIRONMENT/bin/activate"
 export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
 export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 
@@ -37,7 +39,7 @@ echo "AGML_CONFIG       : $AGML_CONFIG"
 echo "Started           : $(date)"
 echo ""
 
-uv run python -m benchmark.run_all "$@"
+python -m benchmark.run_all "$@"
 EXIT_STATUS=$?
 
 echo ""

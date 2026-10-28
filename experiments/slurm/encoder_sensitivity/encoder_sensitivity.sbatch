@@ -8,24 +8,26 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=120G
 #SBATCH --time=72:00:00
-#SBATCH --output=experiments/logs/%x_%j.out
-#SBATCH --error=experiments/logs/%x_%j.err
+#SBATCH --output=/group/jmearlesgrp/uchandar/agml-benchmarking/experiments/logs/%x_%j.out
+#SBATCH --error=/group/jmearlesgrp/uchandar/agml-benchmarking/experiments/logs/%x_%j.err
 
 # Submit from the repo root. Extra arguments are passed straight to the runner:
 #   sbatch experiments/slurm/encoder_sensitivity/encoder_sensitivity.sbatch
 #   sbatch experiments/slurm/encoder_sensitivity/encoder_sensitivity.sbatch --encoders dinov2_base,clip_vit_large --datasets bean_disease_uganda
 #
 # On the login node first (compute nodes run offline):
-#   uv run python -m experiments.pipelines.encoder_sensitivity.run --prefetch-only
-#   uv run python -m experiments.pipelines.encoder_sensitivity.run --smoke-test    (checks that every encoder loads and encodes)
+#   python -m experiments.pipelines.encoder_sensitivity.run --prefetch-only
+#   python -m experiments.pipelines.encoder_sensitivity.run --smoke-test    (checks that every encoder loads and encodes)
 #
 # DINOv3 is gated: accept its license on Hugging Face and run huggingface-cli login before prefetching.
 # When the job is done, summarise the results with:
-#   uv run python -m experiments.pipelines.encoder_sensitivity.analysis
+#   python -m experiments.pipelines.encoder_sensitivity.analysis
 
 module load cuda/12
 
-export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
+# The repo is not a uv project, so activate the environment directly
+PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking-vllm
+source "$PYTHON_ENVIRONMENT/bin/activate"
 export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
 export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 export TORCH_HOME=/group/jmearlesgrp/uchandar/.cache/torch
@@ -45,7 +47,7 @@ echo "Node              : $(hostname)"
 echo "Started           : $(date)"
 echo "---------------------------------------------------------"
 
-uv run python -m experiments.pipelines.encoder_sensitivity.run --config experiments/slurm/encoder_sensitivity/config.yaml "$@"
+python -m experiments.pipelines.encoder_sensitivity.run --config experiments/slurm/encoder_sensitivity/config.yaml "$@"
 EXIT_STATUS=$?
 
 echo "---------------------------------------------------------"

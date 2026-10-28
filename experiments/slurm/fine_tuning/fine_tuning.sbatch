@@ -8,19 +8,21 @@
 #SBATCH --cpus-per-task=12
 #SBATCH --mem=120G
 #SBATCH --time=72:00:00
-#SBATCH --output=experiments/logs/%x_%j.out
-#SBATCH --error=experiments/logs/%x_%j.err
+#SBATCH --output=/group/jmearlesgrp/uchandar/agml-benchmarking/experiments/logs/%x_%j.out
+#SBATCH --error=/group/jmearlesgrp/uchandar/agml-benchmarking/experiments/logs/%x_%j.err
 
 # Submit from the repo root. Extra arguments are passed straight to the runner:
 #   sbatch experiments/slurm/fine_tuning/fine_tuning.sbatch
 #   sbatch experiments/slurm/fine_tuning/fine_tuning.sbatch --datasets bean_disease_uganda --models vit_small
 #
 # Compute nodes do not have reliable internet, so cache datasets and weights on the login node first:
-#   uv run python -m experiments.pipelines.fine_tuning.run --prefetch-only
+#   python -m experiments.pipelines.fine_tuning.run --prefetch-only
 
 module load cuda/12
 
-export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
+# The repo is not a uv project, so activate the environment directly
+PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
+source "$PYTHON_ENVIRONMENT/bin/activate"
 export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
 export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 export TORCH_HOME=/group/jmearlesgrp/uchandar/.cache/torch
@@ -40,7 +42,7 @@ echo "Node              : $(hostname)"
 echo "Started           : $(date)"
 echo "---------------------------------------------------------"
 
-uv run python -m experiments.pipelines.fine_tuning.run --config experiments/slurm/fine_tuning/config.yaml "$@"
+python -m experiments.pipelines.fine_tuning.run --config experiments/slurm/fine_tuning/config.yaml "$@"
 EXIT_STATUS=$?
 
 echo "---------------------------------------------------------"
