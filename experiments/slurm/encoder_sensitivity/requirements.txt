@@ -1,8 +1,0 @@
-# On top of benchmark/slurm/requirements.txt and experiments/slurm/fine_tuning/requirements.txt
-# DINOv3 needs transformers 4.56 or later (SigLIP 2 needs 4.49 or later)
-transformers>=4.56.0
-# Perception Encoder (PE-Core) and BioCLIP 2 load through open_clip
-open_clip_torch>=3.3.0
-timm>=1.0.0
-matplotlib
-pandas

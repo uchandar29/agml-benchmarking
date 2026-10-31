@@ -16,18 +16,13 @@
 #   sbatch experiments/slurm/zero_shot/zero_shot.sbatch qwen_3_5_27b           # only some models (space separated)
 #
 # Cache weights and datasets on the login node first (offline mode unset there):
-#   python -m experiments.pipelines.zero_shot.run --prefetch-only
+#   uv run python -m experiments.pipelines.zero_shot.run --prefetch-only
 #
 # Uses its own environment because vLLM pins its own torch version, which
 # should not touch the benchmark / fine-tuning environment.
 
 module load cuda/12
 
-# The repo is not a uv project, so activate the environment directly
-PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.zero-shot-env
-source "$PYTHON_ENVIRONMENT/bin/activate"
-export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
-export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
@@ -38,6 +33,10 @@ if [ ! -d "$REPO_ROOT/experiments" ] || [ ! -d "$REPO_ROOT/core" ]; then
 fi
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
+
+# Caches on group storage, and the environment this job runs in
+source farm_environment.sh
+export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.zero-shot-env
 
 MODELS=("$@")
 if [ ${#MODELS[@]} -eq 0 ]; then
@@ -53,7 +52,7 @@ echo "---------------------------------------------"
 # One process per model so each one starts with a clean GPU
 EXIT_STATUS=0
 for MODEL_NAME in "${MODELS[@]}"; do
-    python -m experiments.pipelines.zero_shot.run --config experiments/slurm/zero_shot/config.yaml --models "$MODEL_NAME" || EXIT_STATUS=1
+    uv run --no-sync python -m experiments.pipelines.zero_shot.run --config experiments/slurm/zero_shot/config.yaml --models "$MODEL_NAME" || EXIT_STATUS=1
 done
 
 echo "---------------------------------------------"

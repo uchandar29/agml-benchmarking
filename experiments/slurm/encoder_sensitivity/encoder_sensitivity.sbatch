@@ -16,21 +16,15 @@
 #   sbatch experiments/slurm/encoder_sensitivity/encoder_sensitivity.sbatch --encoders dinov2_base,clip_vit_large --datasets bean_disease_uganda
 #
 # On the login node first (compute nodes run offline):
-#   python -m experiments.pipelines.encoder_sensitivity.run --prefetch-only
-#   python -m experiments.pipelines.encoder_sensitivity.run --smoke-test    (checks that every encoder loads and encodes)
+#   uv run python -m experiments.pipelines.encoder_sensitivity.run --prefetch-only
+#   uv run python -m experiments.pipelines.encoder_sensitivity.run --smoke-test    (checks that every encoder loads and encodes)
 #
 # DINOv3 is gated: accept its license on Hugging Face and run huggingface-cli login before prefetching.
 # When the job is done, summarise the results with:
-#   python -m experiments.pipelines.encoder_sensitivity.analysis
+#   uv run python -m experiments.pipelines.encoder_sensitivity.analysis
 
 module load cuda/12
 
-# The repo is not a uv project, so activate the environment directly
-PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking-vllm
-source "$PYTHON_ENVIRONMENT/bin/activate"
-export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
-export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
-export TORCH_HOME=/group/jmearlesgrp/uchandar/.cache/torch
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
@@ -42,12 +36,16 @@ fi
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
 
+# Caches on group storage, and the environment this job runs in
+source farm_environment.sh
+export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking-vllm
+
 echo "Working directory : $PWD"
 echo "Node              : $(hostname)"
 echo "Started           : $(date)"
 echo "---------------------------------------------------------"
 
-python -m experiments.pipelines.encoder_sensitivity.run --config experiments/slurm/encoder_sensitivity/config.yaml "$@"
+uv run --no-sync python -m experiments.pipelines.encoder_sensitivity.run --config experiments/slurm/encoder_sensitivity/config.yaml "$@"
 EXIT_STATUS=$?
 
 echo "---------------------------------------------------------"

@@ -46,7 +46,7 @@ agml-benchmarking/
 │   ├── config.py                     # PipelineConfig dataclass
 │   ├── components/                   # DINOv2 embeddings, ResNet-18 reference training, UMAP
 │   ├── output/                       # incremental JSON report writer
-│   ├── slurm/                        # sbatch, config.json, datasets.yaml, submit_job.py, requirements.txt
+│   ├── slurm/                        # sbatch, config.json, datasets.yaml, submit_job.py
 │   ├── results/                      # one folder per dataset run
 │   ├── figures/                      # benchmark figures and per-dataset metrics CSV
 │   └── logs/                         # SLURM logs
@@ -56,10 +56,12 @@ agml-benchmarking/
 │   │   ├── zero_shot/                # Experiment 2: SigLIP, Gemma 4 and Qwen 3.5
 │   │   └── encoder_sensitivity/      # benchmark metrics under different image encoders
 │   ├── common/                       # config loading, dataset preparation, metrics, reproducibility
-│   ├── slurm/                        # shared.yaml, plus one folder per experiment: sbatch, config.yaml, requirements.txt
+│   ├── slurm/                        # shared.yaml, plus one folder per experiment: sbatch, config.yaml
 │   ├── results/                      # one subfolder per experiment
 │   ├── figures/                      # one subfolder per experiment, plus publication/
 │   └── logs/                         # SLURM logs
+├── pyproject.toml                    # dependencies for every environment (uv project)
+├── farm_environment.sh               # keeps uv, Hugging Face, torch and agml caches on group storage
 ├── IMAGE_CLASSIFICATION.md           # results and experiments write-up
 ├── SCORING_FORMULAS.md               # metric formulas, axis weights, overall score
 └── README.md
@@ -146,23 +148,31 @@ Dataset-specific arguments (name, column names, compound labels) are passed at r
 
 #### Setup on FARM
 
+The repo is a uv project. `pyproject.toml` lists the dependencies, with two extras: `experiments` (fine-tuning and encoder sensitivity) and `zero-shot` (vLLM). `farm_environment.sh` keeps every cache under `/group/jmearlesgrp/$USER/.cache` instead of the home folder, so source it in every login-node shell. The sbatch files source it too.
+
 ```bash
-module load cuda/12
-export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking/
-export HF_HOME=/group/jmearlesgrp/$USER/hf
+source farm_environment.sh
+uv lock                                   # once, then commit uv.lock
+
+# One environment per kind of job, matching the sbatch files
+UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking uv sync --extra experiments
+UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking-vllm uv sync --all-extras
+UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.zero-shot-env uv sync --extra zero-shot
 ```
+
+Jobs run `uv run --no-sync`, because compute nodes are offline and must not try to update the environment.
 
 Download datasets and the DINOv2 model from the **login node** first, since compute nodes may not have internet access:
 
 ```bash
 # Dataset
-python -c "
+uv run python -c "
 from datasets import load_dataset
 load_dataset('Project-AgML/rice_leaf_disease_classification')
 "
 
 # DINOv2 (Phase 2)
-python -c "
+uv run python -c "
 from transformers import AutoModel, AutoImageProcessor
 AutoImageProcessor.from_pretrained('facebook/dinov2-base')
 AutoModel.from_pretrained('facebook/dinov2-base')
@@ -173,24 +183,24 @@ AutoModel.from_pretrained('facebook/dinov2-base')
 
 ```bash
 # Simple
-python -m benchmark.pipeline \
+uv run python -m benchmark.pipeline \
     --dataset Project-AgML/rice_leaf_disease_classification \
     --phases 1 2 3
 
 # If the HF dataset has several configurations (e.g. default, train, raw)
-python -m benchmark.pipeline \
+uv run python -m benchmark.pipeline \
     --dataset Project-AgML/watermelon_disease_classification \
     --hf-config-name raw \
     --phases 1 2 3
 
 # Compound label (joins crop_type and label into one class)
-python -m benchmark.pipeline \
+uv run python -m benchmark.pipeline \
     --dataset Project-AgML/crop_pest_disease_classification \
     --compound-label-cols label crop \
     --phases 1 2 3
 
 # iNatAg dataset via agml
-python -m benchmark.pipeline \
+uv run python -m benchmark.pipeline \
     --dataset iNatAg-mini/acacia_auriculiformis \
     --phases 1 2 3
 ```
@@ -219,7 +229,7 @@ Then submit one SLURM job for all of them, or run them locally:
 ```bash
 python benchmark/slurm/submit_job.py              # SLURM, logs in a dated folder
 sbatch benchmark/slurm/run_benchmark.sbatch        # SLURM, logs in benchmark/logs
-python -m benchmark.run_all                        # local
+uv run python -m benchmark.run_all                        # local
 ```
 
 The datasets run one after another in a single job (48 hour limit, 64 GB GPU). If one fails, the error goes to the `.err` log and the next one starts. Logs are written to `benchmark/logs/YYYY-MM-DD/`.
@@ -256,10 +266,9 @@ sbatch experiments/slurm/fine_tuning/fine_tuning.sbatch --datasets bean_disease_
 
 ### Experiment 2: zero-shot
 
-Classifies test images with SigLIP, Gemma 4 31B and Qwen 3.5 27B without any training. It needs its own environment because vLLM brings its own PyTorch build:
+Classifies test images with SigLIP, Gemma 4 31B and Qwen 3.5 27B without any training. It runs in its own environment, synced with `--extra zero-shot`:
 
 ```bash
-uv pip install "vllm>=0.29.0" && uv pip install -r experiments/slurm/zero_shot/requirements.txt
 sbatch experiments/slurm/zero_shot/zero_shot.sbatch
 ```
 

@@ -19,11 +19,6 @@
 
 module load cuda/12
 
-# The repo is not a uv project, so activate the environment directly
-PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
-source "$PYTHON_ENVIRONMENT/bin/activate"
-export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
-export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
 
 REPO_ROOT="${REPO_ROOT:-$SLURM_SUBMIT_DIR}"
 if [ ! -d "$REPO_ROOT/benchmark" ] || [ ! -d "$REPO_ROOT/core" ]; then
@@ -32,6 +27,10 @@ if [ ! -d "$REPO_ROOT/benchmark" ] || [ ! -d "$REPO_ROOT/core" ]; then
 fi
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
+
+# Caches on group storage, and the environment this job runs in
+source farm_environment.sh
+export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
 export AGML_CONFIG="$REPO_ROOT/benchmark/slurm/config.json"
 
 echo "Working directory : $PWD"
@@ -39,7 +38,7 @@ echo "AGML_CONFIG       : $AGML_CONFIG"
 echo "Started           : $(date)"
 echo ""
 
-python -m benchmark.run_all "$@"
+uv run --no-sync python -m benchmark.run_all "$@"
 EXIT_STATUS=$?
 
 echo ""

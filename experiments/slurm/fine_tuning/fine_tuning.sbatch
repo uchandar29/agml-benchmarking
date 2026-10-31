@@ -16,16 +16,10 @@
 #   sbatch experiments/slurm/fine_tuning/fine_tuning.sbatch --datasets bean_disease_uganda --models vit_small
 #
 # Compute nodes do not have reliable internet, so cache datasets and weights on the login node first:
-#   python -m experiments.pipelines.fine_tuning.run --prefetch-only
+#   uv run python -m experiments.pipelines.fine_tuning.run --prefetch-only
 
 module load cuda/12
 
-# The repo is not a uv project, so activate the environment directly
-PYTHON_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
-source "$PYTHON_ENVIRONMENT/bin/activate"
-export HF_HOME=/group/jmearlesgrp/uchandar/.cache/huggingface
-export AGML_DATA_DIR=/group/jmearlesgrp/uchandar/.cache
-export TORCH_HOME=/group/jmearlesgrp/uchandar/.cache/torch
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 
@@ -37,12 +31,16 @@ fi
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
 
+# Caches on group storage, and the environment this job runs in
+source farm_environment.sh
+export UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.agml-benchmarking
+
 echo "Working directory : $PWD"
 echo "Node              : $(hostname)"
 echo "Started           : $(date)"
 echo "---------------------------------------------------------"
 
-python -m experiments.pipelines.fine_tuning.run --config experiments/slurm/fine_tuning/config.yaml "$@"
+uv run --no-sync python -m experiments.pipelines.fine_tuning.run --config experiments/slurm/fine_tuning/config.yaml "$@"
 EXIT_STATUS=$?
 
 echo "---------------------------------------------------------"
