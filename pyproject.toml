@@ -2,7 +2,7 @@
 name = "agml-benchmarking"
 version = "0.1.0"
 description = "Dataset quality benchmark for agricultural image classification, plus the experiments that validate it"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.14"
 # Benchmark pipeline and the shared core package
 dependencies = [
     "agml",
