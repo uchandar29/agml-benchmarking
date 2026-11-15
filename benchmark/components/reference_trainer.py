@@ -17,8 +17,8 @@ Output (written to run_dir/phase3/)
   reference_model.pt       -- final model state dict
   confidence_history.npy   -- float32 array of shape (N_train, n_epochs)
                               row i = per-epoch max softmax confidence for
-                              the sample with _orig_idx == sorted_orig_idx[i]
-  orig_idx_order.npy       -- int64 array mapping row i → _orig_idx value
+                              the training image whose full-dataset row is orig_idx_order[i]
+  orig_idx_order.npy       -- int64 array mapping row i → row number in the full dataset
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import numpy as np
 from datasets import Dataset
 from tqdm import tqdm
 
-from core.data import DatasetSchema, IndexedImageDataset
+from core.data import DatasetSchema, ImageDataset, imagenet_evaluation_transform
 
 
 class ReferenceModelTrainer:
@@ -43,12 +43,13 @@ class ReferenceModelTrainer:
 		trainer = ReferenceModelTrainer(backbone="resnet18", n_epochs=30)
 		model, conf_history, orig_idx_order = trainer.run(
 			train_dataset=splits.train,
+			train_indices=splits.indices["train"],
 			schema=schema,
 			run_dir=writer.run_dir,
 		)
 		# model            -- trained nn.Module in eval mode
 		# conf_history     -- np.ndarray (N_train, n_epochs) float32
-		# orig_idx_order   -- np.ndarray (N_train,) int64, maps row → _orig_idx
+		# orig_idx_order   -- np.ndarray (N_train,) int64, maps row → full-dataset row
 	"""
 
 	def __init__(
@@ -68,6 +69,7 @@ class ReferenceModelTrainer:
 	def run(
 		self,
 		train_dataset: Dataset,
+		train_indices: np.ndarray,
 		schema: DatasetSchema,
 		run_dir: str,
 		reuse: bool = True,
@@ -77,7 +79,8 @@ class ReferenceModelTrainer:
 
 		Parameters
 		----------
-		train_dataset : HF Dataset with _orig_idx column (output of SplitManager).
+		train_dataset : HF Dataset of the training split (splits.train).
+		train_indices : Row numbers of the training split in the full dataset (splits.indices["train"]).
 		schema        : Resolved DatasetSchema.
 		run_dir       : Root run directory — phase3/ subfolder is used.
 		reuse         : If True and cached files exist, skip training.
@@ -86,7 +89,7 @@ class ReferenceModelTrainer:
 		-------
 		model          : Trained nn.Module in eval mode, on CPU.
 		conf_history   : float32 (N_train, n_epochs) — per-sample per-epoch confidence.
-		orig_idx_order : int64 (N_train,) — maps row index → _orig_idx.
+		orig_idx_order : int64 (N_train,) — maps row index → row number in the full dataset.
 		"""
 		phase3_dir = os.path.join(run_dir, "phase3")
 		model_path = os.path.join(phase3_dir, "reference_model.pt")
@@ -103,7 +106,7 @@ class ReferenceModelTrainer:
 
 		os.makedirs(phase3_dir, exist_ok=True)
 
-		model, conf_history, orig_idx_order = self._train(train_dataset, schema)
+		model, conf_history, orig_idx_order = self._train(train_dataset, train_indices, schema)
 
 		import torch
 		torch.save(model.state_dict(), model_path)
@@ -145,30 +148,26 @@ class ReferenceModelTrainer:
 	def _train(
 		self,
 		train_dataset: Dataset,
+		train_indices: np.ndarray,
 		schema: DatasetSchema,
 	) -> Tuple[object, np.ndarray, np.ndarray]:
 		import torch
 		import torch.nn as nn
 		import torch.optim as optim
 		from torch.utils.data import DataLoader
-		from torchvision import transforms
 
 		device = self._device_override or ("cuda" if torch.cuda.is_available() else "cpu")
 		print(f"  Training {self.backbone} on {device} for {self.n_epochs} epochs …")
 
-		transform = transforms.Compose([
-			transforms.Resize(256),
-			transforms.CenterCrop(224),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=[0.485, 0.456, 0.406],
-			                     std=[0.229, 0.224, 0.225]),
-		])
-
-		hf_ds = IndexedImageDataset(
-			train_dataset, schema.image_col, schema.label_col, transform
+		train_images = ImageDataset(
+			train_dataset,
+			schema.image_col,
+			imagenet_evaluation_transform(),
+			label_column=schema.label_col,
+			original_indices=train_indices,
 		)
 		loader = DataLoader(
-			hf_ds,
+			train_images,
 			batch_size=self.batch_size,
 			shuffle=True,
 			num_workers=0,
@@ -184,10 +183,9 @@ class ReferenceModelTrainer:
 		N = len(train_dataset)
 		n_epochs = self.n_epochs
 
-		# Map _orig_idx → row position in conf_history
-		all_orig_idx = list(train_dataset["_orig_idx"])
-		orig_idx_order = np.array(all_orig_idx, dtype=np.int64)
-		idx_to_row: Dict[int, int] = {oi: i for i, oi in enumerate(all_orig_idx)}
+		# Map full-dataset row number → row position in conf_history
+		orig_idx_order = np.asarray(train_indices, dtype=np.int64)
+		idx_to_row: Dict[int, int] = {int(oi): i for i, oi in enumerate(orig_idx_order)}
 
 		conf_history = np.zeros((N, n_epochs), dtype=np.float32)
 

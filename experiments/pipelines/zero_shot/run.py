@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.data import to_rgb
 from experiments.common import (
 	PreparedDataset,
 	download_dataset,
@@ -90,7 +91,7 @@ def predict_split(classifier, hf_split, image_column: str, label_column: str):
 	true_labels, predicted_labels = [], []
 	for chunk_start in range(0, len(hf_split), IMAGE_READ_CHUNK):
 		chunk = hf_split[chunk_start:chunk_start + IMAGE_READ_CHUNK]
-		chunk_images = [image.convert("RGB") if image.mode != "RGB" else image for image in chunk[image_column]]
+		chunk_images = [to_rgb(image) for image in chunk[image_column]]
 		chunk_predictions = classifier.predict(chunk_images)
 		if len(chunk_predictions) != len(chunk_images):
 			raise RuntimeError(f"Got {len(chunk_predictions)} predictions for {len(chunk_images)} images")

@@ -17,8 +17,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from core.data import ImageDataset
 from experiments.common import (
-	ImageClassificationDataset,
 	PreparedDataset,
 	download_dataset,
 	load_experiment_config,
@@ -117,7 +117,7 @@ def run_single_model(
 	evaluation_transform = build_evaluation_transform(image_size, normalization_mean, normalization_std)
 
 	def make_split_dataset(hf_split, image_transform):
-		return ImageClassificationDataset(hf_split, schema.image_col, schema.label_col, image_transform)
+		return ImageDataset(hf_split, schema.image_col, image_transform, label_column=schema.label_col)
 
 	train_loader = build_data_loader(
 		make_split_dataset(prepared_dataset.splits.train, training_transform),

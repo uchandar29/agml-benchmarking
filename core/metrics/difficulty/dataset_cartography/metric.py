@@ -82,7 +82,7 @@ class DatasetCartographyMetric(BaseMetric):
 		Parameters
 		----------
 		conf_history    : float32 (N_train, n_epochs) from ReferenceModelTrainer.
-		orig_idx_order  : int64 (N_train,) mapping row → _orig_idx.
+		orig_idx_order  : int64 (N_train,) mapping row → full-dataset row number.
 		schema          : DatasetSchema (used for num_classes context).
 
 		Returns

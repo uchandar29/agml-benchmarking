@@ -26,7 +26,7 @@ Output keys
   estimated_noise_rate      -- fraction of samples likely mislabeled (0–1)
   n_noisy_samples           -- absolute count of flagged samples
   n_total_samples           -- total samples evaluated
-  flagged_orig_indices      -- list of _orig_idx values for flagged samples,
+  flagged_orig_indices      -- list of full-dataset row numbers for flagged samples,
                                sorted by cleanlab's self-confidence score
                                (most suspicious first)
   per_class_noise_counts    -- {class_name: n_flagged} breakdown
@@ -69,7 +69,7 @@ class LabelNoiseMetric(BaseMetric):
 		embeddings     : float32 (N, D) L2-normalised DINOv2 embeddings for the
 		                 full dataset (from EmbeddingEngine).
 		labels         : int64 (N,) ground-truth class indices.
-		orig_idx_order : int64 (N,) mapping row → _orig_idx (0 … N-1 for the
+		orig_idx_order : int64 (N,) mapping row → full-dataset row number (0 … N-1 for the
 		                 full dataset, so this is just np.arange(N)).
 		schema         : Resolved DatasetSchema.
 

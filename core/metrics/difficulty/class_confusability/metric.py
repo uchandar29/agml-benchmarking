@@ -62,7 +62,7 @@ class ClassConfusabilityMetric(BaseMetric):
 		Parameters
 		----------
 		model        : Trained nn.Module from ReferenceModelTrainer (eval mode, CPU).
-		test_dataset : HF Dataset with _orig_idx column (splits.test).
+		test_dataset : HF Dataset of the test split (splits.test).
 		schema       : Resolved DatasetSchema.
 		batch_size   : Images per forward pass.
 		device       : Target device.  Auto-detected when None.
@@ -72,25 +72,16 @@ class ClassConfusabilityMetric(BaseMetric):
 		JSON-serialisable dict.
 		"""
 		import torch
-		from torchvision import transforms
 		from torch.utils.data import DataLoader
 
-		from core.data import IndexedImageDataset
+		from core.data import ImageDataset, imagenet_evaluation_transform
 
 		resolved_device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-		transform = transforms.Compose([
-			transforms.Resize(256),
-			transforms.CenterCrop(224),
-			transforms.ToTensor(),
-			transforms.Normalize(mean=[0.485, 0.456, 0.406],
-			                     std=[0.229, 0.224, 0.225]),
-		])
-
-		hf_ds = IndexedImageDataset(
-			test_dataset, schema.image_col, schema.label_col, transform
+		test_images = ImageDataset(
+			test_dataset, schema.image_col, imagenet_evaluation_transform(), label_column=schema.label_col
 		)
-		loader = DataLoader(hf_ds, batch_size=batch_size, shuffle=False, num_workers=0)
+		loader = DataLoader(test_images, batch_size=batch_size, shuffle=False, num_workers=0)
 
 		model = model.to(resolved_device)
 		model.eval()
@@ -99,7 +90,7 @@ class ClassConfusabilityMetric(BaseMetric):
 		all_labels: List[int] = []
 
 		with torch.no_grad():
-			for images, labels, _ in loader:
+			for images, labels in loader:
 				logits = model(images.to(resolved_device))
 				preds = logits.argmax(dim=1)
 				all_preds.extend(preds.cpu().tolist())

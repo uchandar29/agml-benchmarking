@@ -217,7 +217,8 @@ class AgMLBenchmarkPipeline:
             val_ratio=self.cfg.val_ratio,
             seed=self.cfg.split_seed,
         )
-        splits = split_mgr.split(full_dataset, schema.label_col, writer.run_dir)
+        splits = split_mgr.split(full_dataset, schema.label_col)
+        split_index_sets = splits.index_sets()
 
         # ── Phase 1 ───────────────────────────────────────────────────────────
         if 1 in phases:
@@ -235,9 +236,7 @@ class AgMLBenchmarkPipeline:
 
             result = ExactDuplicateMetric().run(
                 full_dataset=splits.full,
-                train_dataset=splits.train,
-                val_dataset=splits.val,
-                test_dataset=splits.test,
+                split_indices=split_index_sets,
                 schema=schema,
             )
             writer.add("exact_duplicate", result)
@@ -279,9 +278,9 @@ class AgMLBenchmarkPipeline:
                 reuse=True,
             )
 
-            train_idx = set(list(splits.train["_orig_idx"]))
-            val_idx   = set(list(splits.val["_orig_idx"]))
-            test_idx  = set(list(splits.test["_orig_idx"]))
+            train_idx = split_index_sets["train"]
+            val_idx   = split_index_sets["val"]
+            test_idx  = split_index_sets["test"]
 
             result = NearDuplicateMetric(
                 threshold=self.cfg.near_dup_threshold,
@@ -383,6 +382,7 @@ class AgMLBenchmarkPipeline:
             )
             ref_model, conf_history, orig_idx_order = trainer.run(
                 train_dataset=splits.train,
+                train_indices=splits.indices["train"],
                 schema=schema,
                 run_dir=writer.run_dir,
                 reuse=True,

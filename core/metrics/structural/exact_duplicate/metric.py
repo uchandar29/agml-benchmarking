@@ -48,18 +48,16 @@ class ExactDuplicateMetric(BaseMetric):
     def run(  # type: ignore[override]
         self,
         full_dataset: Dataset,
-        train_dataset: Dataset,
-        val_dataset: Dataset,
-        test_dataset: Dataset,
+        split_indices: Dict[str, Set[int]],
         schema: DatasetSchema,
         batch_size: int = 32,
     ) -> Dict[str, Any]:
         image_col = schema.image_col
 
-        # Build split membership sets keyed by original index
-        train_idx: Set[int] = set(list(train_dataset["_orig_idx"]))
-        val_idx:   Set[int] = set(list(val_dataset["_orig_idx"]))
-        test_idx:  Set[int] = set(list(test_dataset["_orig_idx"]))
+        # Row numbers of each split in the full dataset (SplitResult.index_sets())
+        train_idx = split_indices["train"]
+        val_idx = split_indices["val"]
+        test_idx = split_indices["test"]
 
         def split_of(orig_idx: int) -> str:
             if orig_idx in train_idx:

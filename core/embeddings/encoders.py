@@ -1,5 +1,5 @@
 """
-Image encoders for the encoder sensitivity experiment.
+Image encoders shared by the benchmark (DINOv2 embeddings) and the encoder sensitivity experiment.
 
 Every encoder turns one PIL image into a preprocessed tensor and a batch of
 tensors into L2-normalised image embeddings, so the benchmark metrics can run
@@ -103,7 +103,7 @@ class ImageEncoder:
 
 
 class TransformersClsEncoder(ImageEncoder):
-	"""Same extraction as benchmark/components/embedding_engine.py: CLS token of last_hidden_state."""
+	"""CLS token of last_hidden_state, the embedding the benchmark uses for DINOv2."""
 
 	def load(self) -> None:
 		from transformers import AutoImageProcessor, AutoModel

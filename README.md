@@ -38,7 +38,8 @@ Datasets come from Hugging Face (`Project-AgML/...`) or the agml library (`iNatA
 ```
 agml-benchmarking/
 ├── core/                             # shared by benchmark and experiments, imports neither
-│   ├── data/                         # dataset loading (HF + agml), stratified 70 / 15 / 15 splits
+│   ├── data/                         # dataset loading (HF + agml), stratified 70 / 15 / 15 splits, PyTorch image dataset
+│   ├── embeddings/                   # image encoders (DINOv2 for the benchmark, plus the encoder sensitivity models)
 │   └── metrics/                      # structural, diversity, difficulty and annotation metrics
 ├── benchmark/
 │   ├── pipeline.py                   # AgMLBenchmarkPipeline: CLI and programmatic API

@@ -1,12 +1,13 @@
 """
 Loads a dataset and rebuilds the exact 70 / 15 / 15 split used by the benchmark
-pipeline, so experiment results line up with the quality scores row for row.
+pipeline (core SplitManager), so experiment results line up with the quality
+scores row for row.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Dict, Tuple
 
 import numpy as np
 from datasets import Dataset
@@ -20,8 +21,6 @@ class PreparedDataset:
 	entry: DatasetEntry
 	schema: DatasetSchema
 	splits: SplitResult
-	# Row numbers in the full dataset, same numbering as the benchmark's _orig_idx
-	split_indices: Dict[str, np.ndarray]
 
 	@property
 	def class_names(self):
@@ -29,11 +28,12 @@ class PreparedDataset:
 
 	@property
 	def split_sizes(self) -> Dict[str, int]:
-		return {
-			"train": len(self.splits.train),
-			"val": len(self.splits.val),
-			"test": len(self.splits.test),
-		}
+		return self.splits.sizes
+
+	@property
+	def split_indices(self) -> Dict[str, np.ndarray]:
+		"""Row numbers of each split in the full dataset, same numbering as the benchmark."""
+		return self.splits.indices
 
 
 def download_dataset(dataset_entry: DatasetEntry) -> None:
@@ -54,61 +54,18 @@ def load_dataset_with_schema(dataset_entry: DatasetEntry) -> Tuple[Dataset, Data
 	return full_dataset, adapter.schema()
 
 
+def build_split_manager(split_settings: Dict[str, Any]) -> SplitManager:
+	return SplitManager(
+		train_ratio=split_settings["train_ratio"],
+		val_ratio=split_settings["val_ratio"],
+		seed=split_settings["seed"],
+	)
+
+
 def prepare_dataset(
 	dataset_entry: DatasetEntry,
 	split_settings: Dict[str, Any],
 ) -> PreparedDataset:
 	full_dataset, schema = load_dataset_with_schema(dataset_entry)
-
-	split_manager = SplitManager(
-		train_ratio=split_settings["train_ratio"],
-		val_ratio=split_settings["val_ratio"],
-		seed=split_settings["seed"],
-	)
-	# Same indices as SplitManager.split(), but without its add_column("_orig_idx") step.
-	# That step rewrites the selected images into a new Arrow table and overflows the
-	# 2GB binary limit on datasets with large images. select() alone is a lazy index map.
-	labels = np.array(full_dataset[schema.label_col])
-	train_indices, val_indices, test_indices = split_manager.compute_indices(labels)
-	splits = SplitResult(
-		full=full_dataset,
-		train=full_dataset.select(train_indices),
-		val=full_dataset.select(val_indices),
-		test=full_dataset.select(test_indices),
-	)
-	print(
-		f"Split complete  train={len(train_indices):,}  val={len(val_indices):,}  "
-		f"test={len(test_indices):,}  (seed={split_settings['seed']})"
-	)
-	return PreparedDataset(
-		entry=dataset_entry,
-		schema=schema,
-		splits=splits,
-		split_indices={"train": train_indices, "val": val_indices, "test": test_indices},
-	)
-
-
-class ImageClassificationDataset:
-	"""Torch-style dataset over a HuggingFace split. Returns (image_tensor, label)."""
-
-	def __init__(
-		self,
-		hf_split: Dataset,
-		image_column: str,
-		label_column: str,
-		image_transform: Callable,
-	) -> None:
-		self.hf_split = hf_split
-		self.image_column = image_column
-		self.label_column = label_column
-		self.image_transform = image_transform
-
-	def __len__(self) -> int:
-		return len(self.hf_split)
-
-	def __getitem__(self, row_index: int):
-		record = self.hf_split[row_index]
-		image = record[self.image_column]
-		if image.mode != "RGB":
-			image = image.convert("RGB")
-		return self.image_transform(image), int(record[self.label_column])
+	splits = build_split_manager(split_settings).split(full_dataset, schema.label_col)
+	return PreparedDataset(entry=dataset_entry, schema=schema, splits=splits)

@@ -26,13 +26,21 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from core.data import DatasetSchema, SplitManager
+from core.data import SPLIT_NAMES, DatasetSchema, ImageDataset
+from core.embeddings import (
+	EncoderSpec,
+	ImageEncoder,
+	build_encoder,
+	download_encoder_weights,
+	parse_encoder_specs,
+)
 from core.metrics.annotation import LabelNoiseMetric
 from core.metrics.difficulty import FeatureSeparabilityMetric
 from core.metrics.diversity import IntraClassDiversityMetric
 from core.metrics.structural import NearDuplicateMetric
 from experiments.common import (
 	DatasetEntry,
+	build_split_manager,
 	download_dataset,
 	load_dataset_with_schema,
 	load_experiment_config,
@@ -40,13 +48,6 @@ from experiments.common import (
 	resolve_repo_path,
 )
 from experiments.common.output_files import write_json
-from experiments.pipelines.encoder_sensitivity.encoders import (
-	EncoderSpec,
-	ImageEncoder,
-	build_encoder,
-	download_encoder_weights,
-	parse_encoder_specs,
-)
 
 
 
@@ -140,13 +141,9 @@ class PreparedImages:
 			num_classes=len(class_names),
 			metadata_cols=[],
 		)
-		split_manager = SplitManager(
-			train_ratio=split_settings["train_ratio"],
-			val_ratio=split_settings["val_ratio"],
-			seed=split_settings["seed"],
-		)
-		train_indices, val_indices, test_indices = split_manager.compute_indices(self.labels)
-		self.split_indices = {"train": set(train_indices.tolist()), "val": set(val_indices.tolist()), "test": set(test_indices.tolist())}
+		# Labels can come from the benchmark run rather than the dataset, so only the indices are needed here
+		split_indices = build_split_manager(split_settings).compute_indices(self.labels)
+		self.split_indices = {name: set(indices.tolist()) for name, indices in zip(SPLIT_NAMES, split_indices)}
 
 	def benchmark_embeddings(self) -> Optional[np.ndarray]:
 		if self.benchmark_run is None:
@@ -155,29 +152,10 @@ class PreparedImages:
 		return np.load(embedding_path) if embedding_path.exists() else None
 
 
-class PreprocessedImageDataset:
-	"""Torch-style dataset that returns one preprocessed image tensor per row."""
-
-	def __init__(self, hf_dataset, image_column: str, preprocess, row_limit: Optional[int] = None) -> None:
-		self.hf_dataset = hf_dataset
-		self.image_column = image_column
-		self.preprocess = preprocess
-		self.row_count = len(hf_dataset) if row_limit is None else min(row_limit, len(hf_dataset))
-
-	def __len__(self) -> int:
-		return self.row_count
-
-	def __getitem__(self, row_index: int):
-		image = self.hf_dataset[row_index][self.image_column]
-		if image.mode != "RGB":
-			image = image.convert("RGB")
-		return self.preprocess(image)
-
-
 def embed_images(encoder: ImageEncoder, prepared: PreparedImages, workers: int, row_limit: Optional[int] = None) -> np.ndarray:
 	from torch.utils.data import DataLoader
 
-	image_dataset = PreprocessedImageDataset(prepared.full_dataset, prepared.image_column, encoder.preprocess, row_limit)
+	image_dataset = ImageDataset(prepared.full_dataset, prepared.image_column, encoder.preprocess, row_limit=row_limit)
 	loader = DataLoader(image_dataset, batch_size=encoder.spec.batch_size, shuffle=False, num_workers=workers)
 	batches = [encoder.encode(pixel_batch) for pixel_batch in loader]
 	return np.concatenate(batches, axis=0)

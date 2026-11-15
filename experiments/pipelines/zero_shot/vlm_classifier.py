@@ -11,6 +11,8 @@ import base64
 import io
 from typing import Any, Dict, List
 
+from core.data import to_rgb
+
 INVALID_PREDICTION = -1
 
 
@@ -22,8 +24,7 @@ def image_to_data_url(image) -> str:
 
 
 def shrink_image(image, max_image_side: int):
-	if image.mode != "RGB":
-		image = image.convert("RGB")
+	image = to_rgb(image)
 	if max(image.size) <= max_image_side:
 		return image
 	resized_image = image.copy()
