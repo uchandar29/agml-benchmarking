@@ -17,6 +17,7 @@ The reference implementation is `src/lib/scoring.ts` in the [project-agml.github
 7. [Implementation](#implementation)
 8. [Design notes](#design-notes)
 9. [Known limitations](#known-limitations)
+10. [Object detection scores (proposal)](#object-detection-scores-proposal)
 
 ## JSON field references
 
@@ -167,3 +168,62 @@ These come from running the scores on 809 datasets and comparing them with model
 - **Diversity saturates:** the 0.4 ceiling is too low for DINOv2 embeddings. 73 of 82 curated datasets and all iNatAg subsets are above it, so the diversity axis is 10 for almost every dataset.
 - **Almost no hard samples:** cartography uses the model's highest softmax probability rather than the probability of the true label, so very few images are marked hard. Only 1 of 82 curated datasets has any.
 - **Structural axis:** on 20 test datasets it showed no link with fine-tuned performance, while content difficulty and annotation reliability did.
+
+## Object detection scores (proposal)
+
+> **Proposal, pending calibration across the library.** The weights and cut-offs below are hand-set and have not been checked against detector performance. The code is `core/metrics/detection_scoring.py` (`score_detection_report(report)`), and the result is written to `report.json` under `scores`. The metrics are described in [OBJECT_DETECTION.md](OBJECT_DETECTION.md).
+
+The scale and rules are the same as above: 0 to 10 with 10 = best, a metric is available when it is in `metrics` and not skipped, an axis is dropped when a required metric is missing, and the overall score is the weighted mean of the axes that remain. As in the classification axes, a **higher score means an easier, cleaner dataset**, so on the difficulty axis a crowded dataset with many small objects scores low.
+
+### Structural quality
+
+Needs `instance_class_imbalance`, `exact_duplicate`, `near_duplicate`, `box_size_distribution`.
+
+| Part | Formula |
+|------|---------|
+| Instance balance | `0.5 * clamp(entropy * 10) + 0.5 * clamp(10 * (1 - log10(ratio) / 2))`, with `entropy` and `ratio` from the box counts per class. A ratio of 1 gives 10, 100 or more gives 0 |
+| Redundancy | `clamp(10 * (1 - (exact_rate + near_rate) / 0.20))` |
+| Size coverage | `10 * H(pct_small, pct_medium, pct_large) / ln 3`, the normalised entropy of the three COCO size buckets |
+| Cross-split penalty | `clamp((cross_split_dups + cross_split_near) * 100 / total_images, 0, 2)`, subtracted |
+
+$$Q_{structural} = \text{clamp}(0.40 \cdot S_{balance} + 0.35 \cdot S_{redundancy} + 0.25 \cdot S_{size} - P_{cross},\ 0,\ 10)$$
+
+### Content difficulty
+
+Needs `box_size_distribution`. Crowding and scale variance count as 10 when they are skipped. Cartography is used when Phase 3 ran.
+
+| Part | Formula | Weight |
+|------|---------|--------|
+| Crowding | `clamp(10 * mean_R)`, where `mean_R` is the mean Clark-Evans ratio (1 or more gives 10) | 0.25 |
+| Small objects | `clamp(10 * (1 - pct_small / 50))`, COCO small share in percent | 0.25 |
+| Scale spread | `clamp(10 * (1 - (mean_spread_factor - 1) / 2))`, a factor of 3 or more gives 0 | 0.20 |
+| Cartography | `clamp(10 * (1 - pct_hard / 50))` on the tracked boxes of the reference detector | 0.30 |
+
+The score is the weighted mean of the parts that are available.
+
+### Diversity
+
+Needs `crop_diversity`.
+
+$$Q_{diversity} = 0.7 \cdot \text{clamp}\!\left(\frac{\text{mean\_diversity}}{0.5} \times 10,\ 0,\ 10\right) + 0.3 \cdot \text{clamp}(10 \cdot (1 - \text{shortcut\_share}),\ 0,\ 10)$$
+
+`mean_diversity` is the intra-class diversity of box crops. `shortcut_share` is the share of class pairs flagged by the co-occurrence metric. It counts as 0 (score 10) when co-occurrence is skipped.
+
+### Annotation reliability
+
+Needs `label_noise` or `missing_annotation`. Both are used when available, each with weight 0.5.
+
+| Part | Formula |
+|------|---------|
+| Label noise | the same curve as classification, on the crop-level noise rate |
+| Missing annotation | `clamp(10 * (1 - missing_rate_estimate / 0.25))` |
+
+### Overall
+
+Same weights as classification: **Structural 30%, Difficulty 25%, Diversity 25%, Annotation 20%**, rescaled over the axes present. Scores are rounded to one decimal.
+
+### Open points
+
+- The ceiling of 0.5 for crop diversity and all cut-offs above need calibration, since the classification diversity axis saturated with its first guess.
+- Size coverage rewards a spread over small, medium and large boxes, which pulls against the small-object term in the difficulty axis.
+- The missing annotation estimate is unverified (see OBJECT_DETECTION.md).

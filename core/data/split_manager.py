@@ -71,7 +71,10 @@ class SplitManager:
 		self.seed = seed
 
 	def split(self, dataset: Dataset, label_col: str) -> SplitResult:
-		labels = np.array(dataset[label_col])
+		return self.split_labels(dataset, np.array(dataset[label_col]))
+
+	def split_labels(self, dataset: Dataset, labels: np.ndarray) -> SplitResult:
+		"""Same split as split(), for labels that are not a column of the dataset (one label per row)."""
 		train_indices, val_indices, test_indices = self.compute_indices(labels)
 		indices = {"train": train_indices, "val": val_indices, "test": test_indices}
 

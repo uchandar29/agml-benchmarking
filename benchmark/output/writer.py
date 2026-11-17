@@ -7,15 +7,16 @@ per pipeline run.
 File layout
 -----------
     results/
-    └── <dataset_name>/          (org prefix stripped, slashes replaced with '_')
-        └── <YYYYMMDD_HHMMSS>/
-            ├── report.json
-            ├── config_used.json
-            └── embeddings/
-                ├── embeddings.npy
-                ├── labels.npy
-                ├── umap_2d.json
-                └── umap_3d.json
+    └── <task>/                  (image_classification or object_detection)
+        └── <dataset_name>/      (org prefix stripped, slashes replaced with '_')
+            └── <YYYYMMDD_HHMMSS>/
+                ├── report.json
+                ├── config_used.json
+                └── embeddings/
+                    ├── embeddings.npy
+                    ├── labels.npy
+                    ├── umap_2d.json
+                    └── umap_3d.json
 
 The report is flushed to disk after every metric is added so a run that
 is interrupted mid-way still leaves a partial-but-valid JSON file.
@@ -33,7 +34,7 @@ class ReportWriter:
     """
     Usage::
 
-        writer = ReportWriter("Project-AgML/rice_leaf_disease_classification")
+        writer = ReportWriter("Project-AgML/rice_leaf_disease_classification", "benchmark/results", "image_classification")
         writer.add("class_imbalance", {...})
         writer.add("exact_duplicate", {...})
         writer.complete_phase(1)
@@ -42,7 +43,7 @@ class ReportWriter:
 
     _PRESERVE_PREFIXES = ("iNatAg/", "iNatAg-mini/")
 
-    def __init__(self, dataset_name: str, output_dir: str = "results") -> None:
+    def __init__(self, dataset_name: str, output_dir: str, task: str) -> None:
         # For iNatAg datasets keep the prefix as a subdirectory;
         # for everything else (e.g. "Project-AgML/rice_...") strip the org prefix.
         if any(dataset_name.startswith(p) for p in self._PRESERVE_PREFIXES):
@@ -56,11 +57,13 @@ class ReportWriter:
         self._run_ts  = now.strftime("%Y%m%d_%H%M%S")
         self._run_date = now.strftime("%Y-%m-%d")
 
-        self.run_dir = os.path.join(output_dir, safe_name, self._run_ts)
+        self.task = task
+        self.run_dir = os.path.join(output_dir, task, safe_name, self._run_ts)
         os.makedirs(self.run_dir, exist_ok=True)
 
         self._report: Dict[str, Any] = {
             "dataset": dataset_name,
+            "task": task,
             "date": self._run_date,
             "reproducibility": {},
             "phases_completed": [],
@@ -82,7 +85,7 @@ class ReportWriter:
         split_seed, train_ratio, val_ratio, test_ratio  -- recreate the exact split
         embed_model                                      -- Phase 2 DINOv2 variant
         near_dup_threshold                               -- near-duplicate cutoff
-        backbone, cartography_epochs, cartography_lr     -- Phase 3 reference model
+        backbone, cartography_epochs, cartography_lr     -- Phase 3 reference model (image_classification section)
         cv_folds                                         -- Label Noise CV folds
         """
         self._report["reproducibility"] = {
@@ -92,9 +95,9 @@ class ReportWriter:
             "test_ratio":          cfg.test_ratio,
             "embed_model":         cfg.embed_model,
             "near_dup_threshold":  cfg.near_dup_threshold,
-            "backbone":            cfg.backbone,
-            "cartography_epochs":  cfg.cartography_epochs,
-            "cartography_lr":      cfg.cartography_lr,
+            "backbone":            cfg.image_classification.backbone,
+            "cartography_epochs":  cfg.image_classification.cartography_epochs,
+            "cartography_lr":      cfg.image_classification.cartography_lr,
             "cv_folds":            cfg.cv_folds,
         }
         self._flush()

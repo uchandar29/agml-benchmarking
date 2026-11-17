@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -12,9 +12,52 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "benchmark" / "slurm" / "config.json"
 
 
 @dataclass
+class ClassificationConfig:
+    """Settings for the image classification benchmark (the "image_classification" section of config.json)."""
+
+    max_silhouette_samples: int = 10_000
+    """Silhouette score is O(N²) in memory.  When N exceeds this value a
+    stratified random sample is drawn instead of using the full matrix."""
+
+    backbone: str = "resnet18"
+    """Torchvision model used as the reference classifier for Dataset Cartography
+    and Class Confusability.  resnet18 is the default — fast and well-understood."""
+
+    cartography_epochs: int = 30
+    """Number of epochs to fine-tune the reference model.  More epochs give
+    smoother confidence trajectories but cost more compute."""
+
+    cartography_lr: float = 1e-3
+    """Learning rate for the reference model fine-tuning run."""
+
+
+@dataclass
+class DetectionConfig:
+    """Settings for the object detection benchmark (the "object_detection" section of config.json)."""
+
+    arch: str = "fasterrcnn_mobilenet_v3_large_fpn"
+    n_epochs: int = 12
+    lr: float = 0.01
+    batch_size: int = 8
+    image_min_size: int = 640
+    max_eval_images: int = 2000
+    score_threshold: float = 0.05
+    missing_score_threshold: float = 0.7
+    missing_iou: float = 0.5
+    crop_max_per_class: int = 2000
+    crop_max_total: int = 20000
+    crop_context_pad: float = 0.1
+    pretrained: bool = True
+    """False builds the detector without COCO weights (offline tests only)."""
+
+
+@dataclass
 class PipelineConfig:
     """
-    Infrastructure and tuning settings for the AgML benchmark pipeline.
+    Infrastructure and tuning settings for the AgML benchmark pipelines.
+
+    config.json has three sections: ``common`` (the fields of this class),
+    ``image_classification`` and ``object_detection`` (one nested dataclass each).
 
     This config captures settings that are **stable across datasets** — compute
     resource limits, split reproducibility, output location, and Phase-2/3
@@ -71,25 +114,13 @@ class PipelineConfig:
     """Dataset size above which FAISS switches from exact (IndexFlatIP) to
     approximate (IndexIVFFlat) search to keep memory bounded."""
 
-    max_silhouette_samples: int = 10_000
-    """Silhouette score is O(N²) in memory.  When N exceeds this value a
-    stratified random sample is drawn instead of using the full matrix."""
-
-    # ── Phase 3 — reference model training ────────────────────────────────────
-    backbone: str = "resnet18"
-    """Torchvision model used as the reference classifier for Dataset Cartography
-    and Class Confusability.  resnet18 is the default — fast and well-understood."""
-
-    cartography_epochs: int = 30
-    """Number of epochs to fine-tune the reference model.  More epochs give
-    smoother confidence trajectories but cost more compute."""
-
-    cartography_lr: float = 1e-3
-    """Learning rate for the reference model fine-tuning run."""
-
     cv_folds: int = 5
     """Number of cross-validation folds for Label Noise Rate (cleanlab OOF
     probabilities).  5 is the standard choice in the cleanlab paper."""
+
+    # ── Per-task sections ──────────────────────────────────────────────────────
+    image_classification: ClassificationConfig = field(default_factory=ClassificationConfig)
+    object_detection: DetectionConfig = field(default_factory=DetectionConfig)
 
     # ── Derived ────────────────────────────────────────────────────────────────
     @property
@@ -141,14 +172,19 @@ class PipelineConfig:
         """
         Load from an explicit JSON file path.
 
-        Unknown keys in the file are silently ignored so that old config files
+        Unknown keys in a section are silently ignored so that old config files
         remain forward-compatible as new fields are added.
         """
         path = os.path.expandvars(os.path.expanduser(path))
         with open(path) as fh:
             raw: Dict[str, Any] = json.load(fh)
-        valid = {f.name for f in dataclasses.fields(cls)}
-        filtered = {k: v for k, v in raw.items() if k in valid}
+        common_valid = {f.name for f in dataclasses.fields(cls)} - {"image_classification", "object_detection"}
+        filtered = {k: v for k, v in raw.get("common", {}).items() if k in common_valid}
+        for section, section_class in (("image_classification", ClassificationConfig), ("object_detection", DetectionConfig)):
+            section_valid = {f.name for f in dataclasses.fields(section_class)}
+            filtered[section] = section_class(
+                **{k: v for k, v in raw.get(section, {}).items() if k in section_valid}
+            )
         return cls(**filtered)
 
     def to_json(self, path: str) -> None:
@@ -160,8 +196,10 @@ class PipelineConfig:
         path = os.path.expandvars(os.path.expanduser(path))
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(path, "w") as fh:
-            json.dump(dataclasses.asdict(self), fh, indent=2)
+            json.dump(self.to_dict(), fh, indent=2)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return config as a plain JSON-serialisable dict."""
-        return dataclasses.asdict(self)
+        """Return config in the nested config.json form."""
+        everything = dataclasses.asdict(self)
+        sections = {name: everything.pop(name) for name in ("image_classification", "object_detection")}
+        return {"common": everything, **sections}

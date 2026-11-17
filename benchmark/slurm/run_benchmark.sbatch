@@ -14,7 +14,9 @@
 
 # Submit from the repo root:
 #   sbatch benchmark/slurm/run_benchmark.sbatch
-#   sbatch benchmark/slurm/run_benchmark.sbatch --yaml benchmark/slurm/datasets.yaml
+#   sbatch benchmark/slurm/run_benchmark.sbatch                          # every entry of datasets.yaml
+#   sbatch benchmark/slurm/run_benchmark.sbatch --task object_detection  # one task
+#   sbatch benchmark/slurm/run_benchmark.sbatch --dataset Project-AgML/GEMINI_cowpea_pod_detection
 # Or use python benchmark/slurm/submit_job.py, which writes logs to a dated folder under benchmark/logs.
 
 module load cuda/12
@@ -38,7 +40,7 @@ echo "AGML_CONFIG       : $AGML_CONFIG"
 echo "Started           : $(date)"
 echo ""
 
-uv run --no-sync python -m benchmark.run_all "$@"
+uv run --no-sync python -m benchmark.run "$@"
 EXIT_STATUS=$?
 
 echo ""

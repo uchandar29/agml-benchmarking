@@ -1,66 +1,22 @@
-#!/usr/bin/env python3
 """
-AgML Benchmark Pipeline — entry point.
+Image classification benchmark pipeline (library class, started by benchmark/run.py).
 
-Programmatic usage
-------------------
-    from benchmark.pipeline import AgMLBenchmarkPipeline
+    from benchmark.pipelines.image_classification import AgMLBenchmarkPipeline
 
-    # Minimal — config auto-loaded from $AGML_CONFIG or benchmark/slurm/config.json
     pipeline = AgMLBenchmarkPipeline("Project-AgML/rice_leaf_disease_classification")
     pipeline.run(phases=[1, 2])
 
-    # Dataset with a specific HF config name (e.g. multi-config dataset)
-    pipeline = AgMLBenchmarkPipeline(
-        "Project-AgML/watermelon_disease_classification",
-        config_name="raw",
-    )
+    # Dataset with a specific HF config name, explicit columns or a compound label
+    AgMLBenchmarkPipeline("Project-AgML/watermelon_disease_classification", config_name="raw")
+    AgMLBenchmarkPipeline("Project-AgML/banana_grade_variety_classification", label_col="label", image_col="image")
 
-    # Dataset with explicit column names (overrides auto-detection)
-    pipeline = AgMLBenchmarkPipeline(
-        "Project-AgML/banana_grade_variety_classification",
-        label_col="label",
-        image_col="image",
-        metadata_cols=["variety", "scale"],
-    )
-
-    # Explicit PipelineConfig (e.g. loaded from a custom path)
-    from benchmark.config import PipelineConfig
-    cfg = PipelineConfig.from_json("benchmark/slurm/config.json")
-    pipeline = AgMLBenchmarkPipeline(
-        "Project-AgML/agarwood_leaf_disease_classification",
-        cfg=cfg,
-    )
-    pipeline.run(phases=[1, 2])
-
-CLI usage
----------
-    # Minimal — config auto-loaded from $AGML_CONFIG or benchmark/slurm/config.json
-    python -m benchmark.pipeline --dataset Project-AgML/rice_leaf_disease_classification --phases 1 2
-
-    # Dataset-specific overrides as CLI flags
-    python -m benchmark.pipeline \\
-        --dataset Project-AgML/watermelon_disease_classification \\
-        --hf-config-name raw \\
-        --phases 1 2
-
-    python -m benchmark.pipeline \\
-        --dataset Project-AgML/banana_grade_variety_classification \\
-        --label-col label --image-col image \\
-        --metadata-cols variety scale \\
-        --phases 1 2
-
-Config auto-discovery (no CLI flag needed)
-------------------------------------------
-    Set $AGML_CONFIG to point at a JSON file, or edit benchmark/slurm/config.json.  Fields not in the file fall back to defaults.
-
-    On FARM, add to your .sbatch script:
-        export AGML_CONFIG=/path/to/config.json
+Settings come from a PipelineConfig: pass cfg=..., or it is auto-loaded from
+$AGML_CONFIG, then benchmark/slurm/config.json, then built-in defaults.
+Results go to <output_dir>/image_classification/<dataset>/<timestamp>/.
 """
 
 from __future__ import annotations
 
-import argparse
 import os
 from typing import List, Optional
 
@@ -68,6 +24,7 @@ import numpy as np
 
 from benchmark.config import PipelineConfig
 from core.data import DatasetAdapter, SplitManager
+from core.embeddings import EncoderSpec, download_encoder_weights
 from benchmark.components.embedding_engine import EmbeddingEngine
 from benchmark.components.reference_trainer import ReferenceModelTrainer
 from benchmark.components.umap_projector import UMAPProjector
@@ -85,6 +42,9 @@ from core.metrics.structural import (
     ResolutionConsistencyMetric,
 )
 from benchmark.output.writer import ReportWriter
+
+
+TASK = "image_classification"
 
 
 class AgMLBenchmarkPipeline:
@@ -162,6 +122,7 @@ class AgMLBenchmarkPipeline:
             self._writer = ReportWriter(
                 dataset_name=self.dataset_name,
                 output_dir=self.cfg.output_dir,
+                task=TASK,
             )
         return self._writer
 
@@ -171,6 +132,24 @@ class AgMLBenchmarkPipeline:
         Safe to call before run() — the timestamp is fixed on first call.
         """
         return self._get_writer().path()
+
+    def _adapter(self) -> DatasetAdapter:
+        return DatasetAdapter(
+            dataset_name=self.dataset_name,
+            config_name=self.config_name,
+            label_col=self.label_col,
+            image_col=self.image_col,
+            metadata_cols=self.metadata_cols,
+            compound_label_cols=self.compound_label_cols,
+        )
+
+    def prefetch(self) -> None:
+        """Download the dataset and the DINOv2 weights into the caches. Nothing else."""
+        self._adapter().download()
+        download_encoder_weights(EncoderSpec(
+            name="benchmark", library="transformers_cls",
+            model_id=self.cfg.embed_model, batch_size=self.cfg.embed_batch_size,
+        ))
 
     def run(self, phases: Optional[List[int]] = None) -> str:
         """
@@ -200,14 +179,7 @@ class AgMLBenchmarkPipeline:
         if self.show_banner:
             _banner(self.dataset_name, phases, writer.path())
 
-        adapter = DatasetAdapter(
-            dataset_name=self.dataset_name,
-            config_name=self.config_name,
-            label_col=self.label_col,
-            image_col=self.image_col,
-            metadata_cols=self.metadata_cols,
-            compound_label_cols=self.compound_label_cols,
-        )
+        adapter = self._adapter()
         full_dataset = adapter.load()
         schema = adapter.schema()
         _print_schema(schema, len(full_dataset))
@@ -307,7 +279,7 @@ class AgMLBenchmarkPipeline:
                 labels=emb_labels,
                 schema=schema,
                 embed_model=self.cfg.embed_model,
-                max_silhouette_samples=self.cfg.max_silhouette_samples,
+                max_silhouette_samples=self.cfg.image_classification.max_silhouette_samples,
             )
             writer.add("feature_separability", result)
             if result.get("skipped"):
@@ -375,9 +347,9 @@ class AgMLBenchmarkPipeline:
             # Train reference model (ResNet-18) — shared by Cartography and
             # Confusability so we only pay the training cost once.
             trainer = ReferenceModelTrainer(
-                backbone=self.cfg.backbone,
-                n_epochs=self.cfg.cartography_epochs,
-                lr=self.cfg.cartography_lr,
+                backbone=self.cfg.image_classification.backbone,
+                n_epochs=self.cfg.image_classification.cartography_epochs,
+                lr=self.cfg.image_classification.cartography_lr,
                 batch_size=self.cfg.embed_batch_size,
             )
             ref_model, conf_history, orig_idx_order = trainer.run(
@@ -457,116 +429,3 @@ def _print_schema(schema, total: int) -> None:
     print(f"  num_classes   : {schema.num_classes}")
     print(f"  metadata_cols : {schema.metadata_cols or '(none)'}")
     print(f"  total images  : {total:,}")
-
-
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="agml-benchmark",
-        description="AgML Dataset Benchmarking Pipeline",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-config auto-discovery (no flag needed):
-  1. $AGML_CONFIG environment variable
-  2. benchmark/slurm/config.json
-  3. Built-in defaults
-
-examples:
-  # Minimal — config auto-loaded
-  python -m benchmark.pipeline --dataset Project-AgML/rice_leaf_disease_classification --phases 1 2
-
-  # Multi-config HF dataset
-  python -m benchmark.pipeline \\
-      --dataset Project-AgML/watermelon_disease_classification \\
-      --hf-config-name raw --phases 1 2
-
-  # Dataset with explicit column names and metadata
-  python -m benchmark.pipeline \\
-      --dataset Project-AgML/banana_grade_variety_classification \\
-      --label-col label --image-col image \\
-      --metadata-cols variety scale \\
-      --phases 1 2
-
-  # FARM job: config picked up from $AGML_CONFIG set in .sbatch
-  python -m benchmark.pipeline \\
-      --dataset Project-AgML/agarwood_leaf_disease_classification \\
-      --phases 1 2
-        """,
-    )
-
-    # ── Required ──────────────────────────────────────────────────────────────
-    parser.add_argument(
-        "--dataset",
-        required=True,
-        metavar="HF_REPO",
-        help="HuggingFace dataset identifier, e.g. Project-AgML/rice_leaf_disease_classification",
-    )
-
-    # ── Dataset-specific overrides ────────────────────────────────────────────
-    parser.add_argument(
-        "--hf-config-name",
-        default=None,
-        metavar="NAME",
-        help="HF dataset config name (e.g. 'raw').  None → HF default.",
-    )
-    parser.add_argument(
-        "--label-col",
-        default=None,
-        help="Label column name.  Overrides auto-detection.",
-    )
-    parser.add_argument(
-        "--image-col",
-        default=None,
-        help="Image column name.  Overrides auto-detection.",
-    )
-    parser.add_argument(
-        "--metadata-cols",
-        nargs="*",
-        default=None,
-        metavar="COL",
-        help=(
-            "Metadata column names for coverage analysis.  "
-            "Pass no names (--metadata-cols) to disable metadata analysis."
-        ),
-    )
-    parser.add_argument(
-        "--compound-label-cols",
-        nargs="+",
-        default=None,
-        metavar="COL",
-        help=(
-            "Two or more columns to combine into a compound label.  "
-            "Values are joined with ', ' in the given order.  "
-            "Example: --compound-label-cols crop_type label  "
-            "→ class names like 'tomato, bruised'."
-        ),
-    )
-
-    # ── Run control ───────────────────────────────────────────────────────────
-    parser.add_argument(
-        "--phases",
-        nargs="+",
-        type=int,
-        default=[1],
-        help="Phases to run (default: 1).  Example: --phases 1 2",
-    )
-
-    return parser
-
-
-if __name__ == "__main__":
-    _args = _build_parser().parse_args()
-
-    # Infrastructure config: auto-discovered (no CLI flag)
-    _cfg = PipelineConfig.load()
-
-    AgMLBenchmarkPipeline(
-        dataset_name=_args.dataset,
-        config_name=_args.hf_config_name,
-        label_col=_args.label_col,
-        image_col=_args.image_col,
-        metadata_cols=_args.metadata_cols,
-        compound_label_cols=_args.compound_label_cols,
-        cfg=_cfg,
-    ).run(phases=_args.phases)

@@ -3,7 +3,7 @@ Encoder sensitivity: recompute every embedding-based benchmark metric with sever
 image encoders to see how much the metrics depend on the encoder.
 
 Labels, class names and splits come from the benchmark run of each dataset
-(benchmark/results/<dataset>/<run>/embeddings/labels.npy), so every encoder is scored
+(benchmark/results/image_classification/<dataset>/<run>/embeddings/labels.npy), so every encoder is scored
 on exactly the same images, labels and splits as the benchmark.
 
 Usage (from repo root):

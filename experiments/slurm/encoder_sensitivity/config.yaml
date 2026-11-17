@@ -4,7 +4,7 @@
 
 encoder_sensitivity:
     experiment_name: "encoder_sensitivity"
-    benchmark_results_root: benchmark/results
+    benchmark_results_root: benchmark/results/image_classification
     skip_completed_runs: true
     save_embeddings: true
     near_duplicate_thresholds: [0.95, 0.98, 0.99]

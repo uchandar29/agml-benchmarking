@@ -32,6 +32,7 @@ Datasets come from Hugging Face (`Project-AgML/...`) or the agml library (`iNatA
 2. [Benchmark pipeline](#benchmark-pipeline)
 3. [Experiments](#experiments)
 4. [UMAP embedding format (UEB2)](#umap-embedding-format-ueb2)
+5. [Object detection benchmark](#object-detection-benchmark)
 
 ## Repository layout
 
@@ -42,13 +43,13 @@ agml-benchmarking/
 │   ├── embeddings/                   # image encoders (DINOv2 for the benchmark, plus the encoder sensitivity models)
 │   └── metrics/                      # structural, diversity, difficulty and annotation metrics
 ├── benchmark/
-│   ├── pipeline.py                   # AgMLBenchmarkPipeline: CLI and programmatic API
-│   ├── run_all.py                    # runs every dataset in slurm/datasets.yaml
-│   ├── config.py                     # PipelineConfig dataclass
-│   ├── components/                   # DINOv2 embeddings, ResNet-18 reference training, UMAP
+│   ├── run.py                        # the one entry point: runs the datasets in slurm/datasets.yaml
+│   ├── pipelines/                    # one library class per task: image_classification.py, object_detection.py
+│   ├── config.py                     # PipelineConfig (common settings, plus one section per task)
+│   ├── components/                   # DINOv2 embeddings, ResNet-18 and detector reference training, UMAP
 │   ├── output/                       # incremental JSON report writer
 │   ├── slurm/                        # sbatch, config.json, datasets.yaml, submit_job.py
-│   ├── results/                      # one folder per dataset run
+│   ├── results/                      # <task>/<dataset>/<timestamp>/ per run
 │   ├── figures/                      # benchmark figures and per-dataset metrics CSV
 │   └── logs/                         # SLURM logs
 ├── experiments/
@@ -127,21 +128,33 @@ Infrastructure settings live in `benchmark/slurm/config.json` and are found at s
 2. `benchmark/slurm/config.json`
 3. Built-in defaults
 
-Key settings:
+The file has three sections. `common` is shared by every task, the other two belong to one task each:
 
 ```json
 {
-  "split_seed": 42,
-  "train_ratio": 0.70,
-  "val_ratio": 0.15,
-  "embed_model": "facebook/dinov2-base",
-  "embed_batch_size": 64,
-  "near_dup_threshold": 0.98,
-  "backbone": "resnet18",
-  "cartography_epochs": 30,
-  "cv_folds": 5
+  "common": {
+    "split_seed": 42,
+    "train_ratio": 0.70,
+    "val_ratio": 0.15,
+    "output_dir": "benchmark/results",
+    "embed_model": "facebook/dinov2-base",
+    "embed_batch_size": 64,
+    "near_dup_threshold": 0.98,
+    "cv_folds": 5
+  },
+  "image_classification": {
+    "backbone": "resnet18",
+    "cartography_epochs": 30,
+    "cartography_lr": 0.001
+  },
+  "object_detection": {
+    "arch": "fasterrcnn_mobilenet_v3_large_fpn",
+    "n_epochs": 12
+  }
 }
 ```
+
+(Shortened. The real file has every key, see `benchmark/config.py` for the full list.)
 
 Dataset-specific arguments (name, column names, compound labels) are passed at runtime, not stored in the config.
 
@@ -163,85 +176,70 @@ UV_PROJECT_ENVIRONMENT=/group/jmearlesgrp/$USER/agml-benchmarking/.zero-shot-env
 
 Jobs run `uv run --no-sync`, because compute nodes are offline and must not try to update the environment.
 
-Download datasets and the DINOv2 model from the **login node** first, since compute nodes may not have internet access:
+Compute nodes are offline, so download everything from the **login node** first. `--prefetch-only` downloads the dataset and model weights of the selected entries into the caches and does nothing else (no splits, no metrics):
 
 ```bash
-# Dataset
-uv run python -c "
-from datasets import load_dataset
-load_dataset('Project-AgML/rice_leaf_disease_classification')
-"
-
-# DINOv2 (Phase 2)
-uv run python -c "
-from transformers import AutoModel, AutoImageProcessor
-AutoImageProcessor.from_pretrained('facebook/dinov2-base')
-AutoModel.from_pretrained('facebook/dinov2-base')
-"
+uv run python -m benchmark.run --prefetch-only                          # every entry
+uv run python -m benchmark.run --task image_classification --prefetch-only
 ```
 
-#### Single dataset
+#### One entry or one task
+
+Every dataset lives in `benchmark/slurm/datasets.yaml`. `--dataset` takes the exact `name` of an entry:
 
 ```bash
-# Simple
-uv run python -m benchmark.pipeline \
-    --dataset Project-AgML/rice_leaf_disease_classification \
-    --phases 1 2 3
-
-# If the HF dataset has several configurations (e.g. default, train, raw)
-uv run python -m benchmark.pipeline \
-    --dataset Project-AgML/watermelon_disease_classification \
-    --hf-config-name raw \
-    --phases 1 2 3
-
-# Compound label (joins crop_type and label into one class)
-uv run python -m benchmark.pipeline \
-    --dataset Project-AgML/crop_pest_disease_classification \
-    --compound-label-cols label crop \
-    --phases 1 2 3
-
-# iNatAg dataset via agml
-uv run python -m benchmark.pipeline \
-    --dataset iNatAg-mini/acacia_auriculiformis \
-    --phases 1 2 3
+uv run python -m benchmark.run --dataset Project-AgML/rice_leaf_disease_classification
+uv run python -m benchmark.run --dataset iNatAg-mini/acacia_auriculiformis --phases 1 2
+uv run python -m benchmark.run --task object_detection
 ```
 
-#### Many datasets
+`--phases` overrides the phases of the yaml. To benchmark a new dataset, add an entry to the yaml (a dataset with several HF configurations needs `hf_config_name`, a compound label needs `compound_label_cols`).
 
-List the datasets in `benchmark/slurm/datasets.yaml`. Each entry inherits from `defaults` and can override schema fields:
+#### The dataset list
+
+Each entry inherits from `defaults`. Keys at the top of `defaults` apply to every entry, the block named after a task applies to that task only, and keys on the entry win over both. An entry without `task` is an `image_classification` entry (`classification` is accepted as an alias):
 
 ```yaml
 defaults:
-  phases: "1 2 3"
-  hf_config_name: ""
-  label_col: "label"
-  image_col: "image"
-  compound_label_cols: []
+    task: "image_classification"
+    phases: "1 2 3"
+    hf_config_name: ""
+    image_col: "image"
+    image_classification:
+        label_col: "label"
+        compound_label_cols: []
+    object_detection:
+        objects_col: "objects"
+        bbox_key: "bbox"
+        category_key: "categories"
+        bbox_format: "auto"
 
 datasets:
-  - name: "Project-AgML/corn_leaf_pest_classification"
-  - name: "Project-AgML/date_grade_variety_classification"
-    compound_label_cols: ["label", "variety", "size"]
-  - name: "iNatAg-mini/acacia_auriculiformis"
+    - name: "Project-AgML/corn_leaf_pest_classification"
+    - name: "Project-AgML/date_grade_variety_classification"
+      compound_label_cols: ["label", "variety", "size"]
+    - name: "Project-AgML/GEMINI_cowpea_pod_detection"
+      task: "object_detection"
 ```
 
-Then submit one SLURM job for all of them, or run them locally:
+Then submit one SLURM job, or run locally:
 
 ```bash
-python benchmark/slurm/submit_job.py              # SLURM, logs in a dated folder
-sbatch benchmark/slurm/run_benchmark.sbatch        # SLURM, logs in benchmark/logs
-uv run python -m benchmark.run_all                        # local
+python benchmark/slurm/submit_job.py                                   # SLURM, every entry, logs in a dated folder
+sbatch benchmark/slurm/run_benchmark.sbatch                            # SLURM, every entry, logs in benchmark/logs
+sbatch benchmark/slurm/run_benchmark.sbatch --task object_detection    # SLURM, one task
+uv run python -m benchmark.run                                         # local
 ```
 
 The datasets run one after another in a single job (48 hour limit, 64 GB GPU). If one fails, the error goes to the `.err` log and the next one starts. Logs are written to `benchmark/logs/YYYY-MM-DD/`.
 
 ### Output
 
-Each run writes to `benchmark/results/<dataset_name>/`:
+Each run writes to `benchmark/results/<task>/<dataset_name>/<timestamp>/`, with `<task>` being `image_classification` or `object_detection`:
 
 ```
-benchmark/results/rice_leaf_disease_classification/
-├── result.json          # all metric outputs and reproducibility metadata
+benchmark/results/image_classification/rice_leaf_disease_classification/<timestamp>/
+├── report.json          # all metric outputs and reproducibility metadata
 ├── config_used.json     # exact config snapshot for the run
 └── embeddings/
     ├── embeddings.npy   # DINOv2 CLS embeddings, shape (N, 768), L2-normalised
@@ -250,6 +248,12 @@ benchmark/results/rice_leaf_disease_classification/
 ```
 
 Results are saved as each phase finishes, so if a job is killed, the completed phases are kept.
+
+Results from before the task folders existed sit directly in `benchmark/results/<dataset>/`. Move them once on FARM:
+
+```bash
+mkdir -p benchmark/results/image_classification && find benchmark/results -mindepth 1 -maxdepth 1 -type d ! -name image_classification ! -name object_detection -exec mv {} benchmark/results/image_classification/ \;
+```
 
 ## Experiments
 
@@ -439,3 +443,38 @@ static/data/dataset-benchmarking/embeddings/<dataset>_umap.bin
 static/data/dataset-benchmarking/embeddings/iNatAg/<species>_umap.bin
 static/data/dataset-benchmarking/embeddings/iNatAg-mini/<species>_umap.bin
 ```
+
+## Object detection benchmark
+
+Scores detection datasets (boxes, crops, a reference Faster R-CNN). Metrics and report fields are in [OBJECT_DETECTION.md](OBJECT_DETECTION.md), the proposed scores in [SCORING_FORMULAS.md](SCORING_FORMULAS.md#object-detection-scores-proposal).
+
+### Run on FARM
+
+Compute nodes are offline, so download everything on the login node first:
+
+```bash
+cd /group/jmearlesgrp/uchandar/agml-benchmarking
+source farm_environment.sh
+export UV_PROJECT_ENVIRONMENT=$PWD/.agml-benchmarking
+uv run python -m benchmark.run --task object_detection --prefetch-only
+
+sbatch benchmark/slurm/run_benchmark.sbatch --task object_detection
+```
+
+`--prefetch-only` downloads the datasets, the torchvision detector weights and DINOv2, and nothing else. The detection datasets are the entries with `task: "object_detection"` in `benchmark/slurm/datasets.yaml`.
+
+One dataset on its own:
+
+```bash
+uv run python -m benchmark.run --dataset Project-AgML/GEMINI_cowpea_pod_detection --phases 1 2 3
+```
+
+Set `bbox_format: coco|coco_normalized|yolo|voc` on the yaml entry if the automatic detection is wrong for a dataset. Results go to `benchmark/results/object_detection/<dataset>/<timestamp>/`.
+
+### Tests
+
+```bash
+uv run --with pytest python -m pytest tests
+```
+
+The pipeline test builds a tiny dataset in memory, uses a stub encoder and a detector without pretrained weights, so it runs offline on a CPU.

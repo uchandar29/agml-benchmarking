@@ -1,18 +1,35 @@
 {
-  "split_seed": 42,
-  "train_ratio": 0.70,
-  "val_ratio": 0.15,
+  "common": {
+    "split_seed": 42,
+    "train_ratio": 0.70,
+    "val_ratio": 0.15,
+    "output_dir": "benchmark/results",
+    "embed_model": "facebook/dinov2-base",
+    "embed_batch_size": 64,
+    "near_dup_threshold": 0.98,
+    "faiss_ivf_threshold": 100000,
+    "cv_folds": 5
+  },
 
-  "output_dir": "benchmark/results",
+  "image_classification": {
+    "max_silhouette_samples": 10000,
+    "backbone": "resnet18",
+    "cartography_epochs": 30,
+    "cartography_lr": 0.001
+  },
 
-  "embed_model": "facebook/dinov2-base",
-  "embed_batch_size": 64,
-  "near_dup_threshold": 0.98,
-  "faiss_ivf_threshold": 100000,
-  "max_silhouette_samples": 10000,
-
-  "backbone": "resnet18",
-  "cartography_epochs": 30,
-  "cartography_lr": 0.001,
-  "cv_folds": 5
+  "object_detection": {
+    "arch": "fasterrcnn_mobilenet_v3_large_fpn",
+    "n_epochs": 12,
+    "lr": 0.01,
+    "batch_size": 8,
+    "image_min_size": 640,
+    "max_eval_images": 2000,
+    "score_threshold": 0.05,
+    "missing_score_threshold": 0.7,
+    "missing_iou": 0.5,
+    "crop_max_per_class": 2000,
+    "crop_max_total": 20000,
+    "crop_context_pad": 0.1
+  }
 }

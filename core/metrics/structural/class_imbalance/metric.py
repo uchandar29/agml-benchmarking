@@ -22,13 +22,13 @@ total_train_examples : int
 
 from __future__ import annotations
 
-import math
 from collections import Counter
 from typing import Any, Dict
 
 from datasets import Dataset
 
 from core.metrics.base import BaseMetric
+from core.metrics.common import imbalance_stats
 from core.data import DatasetSchema
 
 
@@ -51,27 +51,8 @@ class ClassImbalanceMetric(BaseMetric):
             for k, v in sorted(counts.items())
         }
 
-        values = list(named.values())
-        total = sum(values)
-        K = schema.num_classes
-        max_count = max(values)
-        min_count = min(values)
-
-        imbalance_ratio = max_count / min_count if min_count > 0 else float("inf")
-
-        # Shannon entropy, normalised to [0, 1]
-        entropy = 0.0
-        for c in values:
-            p = c / total
-            if p > 0:
-                entropy -= p * math.log(p)
-        norm_entropy = entropy / math.log(K) if K > 1 else 1.0
-
+        stats = imbalance_stats(named, num_classes=schema.num_classes)
         return {
-            "counts": named,
-            "imbalance_ratio": round(imbalance_ratio, 4),
-            "normalized_entropy": round(norm_entropy, 4),
-            "most_frequent_class": max(named, key=named.get),
-            "least_frequent_class": min(named, key=named.get),
-            "total_train_examples": total,
+            **stats,
+            "total_train_examples": sum(named.values()),
         }
