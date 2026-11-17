@@ -34,6 +34,20 @@ from core.data import BoxTable, to_rgb
 
 IOU_MATCH = 0.5
 NMS_IOU = 0.5
+GRADIENT_CLIP_NORM = 10.0
+MIN_TRAIN_BOX_SIDE = 1.0  # pixels; smaller boxes give huge regression targets
+WARMUP_START_FACTOR = 0.001
+MAX_WARMUP_ITERATIONS = 500
+MAX_SKIPPED_BATCH_SHARE = 0.25
+
+
+def learning_rate_factor(iteration: int, warmup_iterations: int, total_iterations: int) -> float:
+	"""Linear warmup from WARMUP_START_FACTOR to 1, then cosine decay to 0, stepped every iteration."""
+	if iteration < warmup_iterations:
+		progress = iteration / max(1, warmup_iterations)
+		return WARMUP_START_FACTOR + (1.0 - WARMUP_START_FACTOR) * progress
+	decay_progress = (iteration - warmup_iterations) / max(1, total_iterations - warmup_iterations)
+	return 0.5 * (1.0 + np.cos(np.pi * min(1.0, decay_progress)))
 
 
 @dataclass
@@ -213,9 +227,12 @@ class ReferenceDetector:
 		import torch
 
 		rows = box_table.subset([image_index])
+		boxes = box_table.boxes_xyxy[rows]
+		# Sub-pixel boxes stay in the statistics but are left out of training
+		large_enough = ((boxes[:, 2] - boxes[:, 0]) >= MIN_TRAIN_BOX_SIDE) & ((boxes[:, 3] - boxes[:, 1]) >= MIN_TRAIN_BOX_SIDE)
 		return {
-			"boxes": torch.as_tensor(box_table.boxes_xyxy[rows], dtype=torch.float32).reshape(-1, 4),
-			"labels": torch.as_tensor(box_table.class_id[rows] + 1, dtype=torch.int64),  # 0 is background
+			"boxes": torch.as_tensor(boxes[large_enough], dtype=torch.float32).reshape(-1, 4),
+			"labels": torch.as_tensor(box_table.class_id[rows][large_enough] + 1, dtype=torch.int64),  # 0 is background
 		}
 
 	def _predict(self, model, dataset: Dataset, image_col: str, image_indices: np.ndarray, device: str, desc: str):
@@ -260,14 +277,18 @@ class ReferenceDetector:
 		model = self._build_model(box_table.num_classes).to(device)
 		parameters = [parameter for parameter in model.parameters() if parameter.requires_grad]
 		optimizer = torch.optim.SGD(parameters, lr=self.lr, momentum=0.9, weight_decay=5e-4)
-		scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.n_epochs)
 		iterations_per_epoch = -(-len(train_images) // self.batch_size)
-		warmup_iterations = min(200, iterations_per_epoch)
-		iteration = 0
+		total_iterations = iterations_per_epoch * self.n_epochs
+		# Small datasets have few batches per epoch, so warm up over a share of the whole run
+		warmup_iterations = min(MAX_WARMUP_ITERATIONS, max(1, total_iterations // 4))
+		scheduler = torch.optim.lr_scheduler.LambdaLR(
+			optimizer, lambda step: learning_rate_factor(step, warmup_iterations, total_iterations)
+		)
 
 		for epoch in range(self.n_epochs):
 			model.train()
 			order = rng.permutation(train_images)
+			skipped_batches, batches = 0, 0
 			for start in tqdm(range(0, len(order), self.batch_size), desc=f"Epoch {epoch + 1}/{self.n_epochs}", leave=False):
 				images, targets = [], []
 				for image_index in order[start : start + self.batch_size]:
@@ -282,18 +303,23 @@ class ReferenceDetector:
 					targets.append({key: value.to(device) for key, value in target.items()})
 				losses = model(images, targets)
 				loss = sum(losses.values())
-				if not torch.isfinite(loss):
-					raise RuntimeError(
-						f"Detector loss became {loss.item()} in epoch {epoch + 1}. Try a lower lr in the detection config."
-					)
-				if iteration < warmup_iterations:  # linear warmup
-					for group in optimizer.param_groups:
-						group["lr"] = self.lr * (iteration + 1) / warmup_iterations
-				iteration += 1
+				batches += 1
 				optimizer.zero_grad()
-				loss.backward()
-				optimizer.step()
-			scheduler.step()
+				if torch.isfinite(loss):
+					loss.backward()
+					torch.nn.utils.clip_grad_norm_(parameters, GRADIENT_CLIP_NORM)
+					optimizer.step()
+				else:
+					# The check runs before backward, so the weights are still finite and one bad batch can be skipped
+					skipped_batches += 1
+				scheduler.step()
+			if skipped_batches:
+				print(f"  ⚠  Skipped {skipped_batches}/{batches} batches with a non-finite loss in epoch {epoch + 1}")
+			if skipped_batches > MAX_SKIPPED_BATCH_SHARE * batches:
+				raise RuntimeError(
+					f"Detector loss was non-finite in {skipped_batches}/{batches} batches of epoch {epoch + 1}. "
+					"Try a lower lr in the detection config."
+				)
 
 			for image_index, (boxes, labels, scores) in zip(
 				eval_images, self._predict(model, dataset, image_col, eval_images, device, "Tracking train boxes")
