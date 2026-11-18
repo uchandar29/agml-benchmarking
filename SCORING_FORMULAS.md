@@ -190,16 +190,17 @@ $$Q_{structural} = \text{clamp}(0.40 \cdot S_{balance} + 0.35 \cdot S_{redundanc
 
 ### Content difficulty
 
-Needs `box_size_distribution`. Crowding and scale variance count as 10 when they are skipped. Cartography is used when Phase 3 ran.
+Needs `box_size_distribution`. Crowding, box occlusion and scale variance count as 10 when they are skipped. Cartography is used when Phase 3 ran.
 
 | Part | Formula | Weight |
 |------|---------|--------|
 | Crowding | `clamp(10 * mean_R)`, where `mean_R` is the mean Clark-Evans ratio (1 or more gives 10) | 0.25 |
+| Box occlusion | `clamp(10 * (1 - mean_image_bor / 0.5))`, where `mean_image_bor` is the mean over images of the share of each box covered by the union of the other boxes (0 gives 10, 0.5 or more gives 0) | 0.25 |
 | Small objects | `clamp(10 * (1 - pct_small / 50))`, COCO small share in percent | 0.25 |
 | Scale spread | `clamp(10 * (1 - (mean_spread_factor - 1) / 2))`, a factor of 3 or more gives 0 | 0.20 |
 | Cartography | `clamp(10 * (1 - pct_hard / 50))` on the tracked boxes of the reference detector | 0.30 |
 
-The score is the weighted mean of the parts that are available.
+The score is the weighted mean of the parts that are available. Weights are rescaled to sum to 1, so adding box occlusion lowers the share of every other part.
 
 ### Diversity
 

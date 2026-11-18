@@ -8,6 +8,7 @@ def good_report():
 		"near_duplicate": {"near_duplicate_rate": 0.0, "cross_split_near_duplicates": 0},
 		"box_size_distribution": {"coco": {"pct_small": 0.0, "pct_medium": 50.0, "pct_large": 50.0}},
 		"crowding": {"mean_R": 1.1},
+		"box_occlusion": {"mean_image_bor": 0.0},
 		"scale_variance": {"mean_spread_factor": 1.0},
 		"dataset_cartography": {"pct_hard": 0.0},
 		"crop_diversity": {"mean_diversity": 0.6},
@@ -45,3 +46,10 @@ def test_missing_axis_is_dropped_and_skipped_metric_ignored():
 	assert "label_noise" not in scores["sub_scores"] and scores["annotation"] == 10.0
 	# remaining weights rescale, so three perfect axes stay at 10
 	assert scores["overall"] == 10.0
+
+
+def test_high_box_occlusion_lowers_difficulty():
+	report = good_report()
+	report["metrics"]["box_occlusion"] = {"mean_image_bor": 0.4}
+	scores = score_detection_report(report)
+	assert scores["difficulty"] < 10.0 and scores["sub_scores"]["box_occlusion"] == 2.0

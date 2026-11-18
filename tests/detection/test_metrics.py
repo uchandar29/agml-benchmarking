@@ -3,7 +3,8 @@ import math
 import numpy as np
 
 from core.metrics.common import imbalance_stats
-from core.metrics.difficulty import CrowdingMetric, ScaleVarianceMetric
+from core.metrics.difficulty import BoxOcclusionMetric, CrowdingMetric, ScaleVarianceMetric
+from core.metrics.difficulty.box_occlusion.metric import box_occlusion_scores, high_iou_pair_count
 from core.metrics.diversity import CoOccurrenceMetric
 from core.metrics.structural import BoxSizeDistributionMetric
 from tests.detection.synthetic import make_box_table
@@ -80,3 +81,86 @@ def test_imbalance_stats_values():
 	expected_entropy = -(0.8 * math.log(0.8) + 0.2 * math.log(0.2)) / math.log(2)
 	assert stats["normalized_entropy"] == round(expected_entropy, 4)
 	assert stats["most_frequent_class"] == "a" and stats["least_frequent_class"] == "b"
+
+
+def test_occlusion_identical_boxes():
+	boxes = np.array([square(10), square(10)])
+	assert box_occlusion_scores(boxes).tolist() == [1.0, 1.0]
+	assert high_iou_pair_count(boxes, 0.5) == 1
+
+
+def test_occlusion_union_of_two_halves():
+	boxes = np.array([[0, 0, 10, 10], [0, 0, 5, 10], [5, 0, 10, 10]], dtype=float)
+	assert box_occlusion_scores(boxes)[0] == 1.0
+
+
+def test_occlusion_overlapping_neighbours_not_double_counted():
+	boxes = np.array([[0, 0, 10, 10], [7, 0, 20, 10], [7, 0, 15, 10]], dtype=float)
+	assert abs(box_occlusion_scores(boxes)[0] - 0.3) < 1e-9
+
+
+def test_occlusion_disjoint_and_single_box_images():
+	table = make_box_table([(100, 100), (100, 100), (100, 100)],
+		[[square(10), square(10, 50, 50)], [square(10)], []], [[0, 0], [0], []], ["a"])
+	result = BoxOcclusionMetric().run(box_table=table)
+	assert result["mean_image_bor"] == 0.0 and result["images_evaluated"] == 3 and result["boxes_evaluated"] == 3
+	assert result["mean_high_iou_pairs_per_image"] == 0.0
+
+
+def test_occlusion_thirty_percent_not_above_half():
+	boxes = [[0, 0, 10, 10], [7, 0, 20, 10]]
+	table = make_box_table([(100, 100), (100, 100)], [boxes, [square(10)]], [[0, 0], [0]], ["a"])
+	result = BoxOcclusionMetric().run(box_table=table)
+	assert result["pct_boxes_occ_above_half"] == 0.0
+	assert abs(result["mean_image_bor"] - (0.3 + 3 / 13) / 2 / 2) < 1e-3
+
+
+def test_occlusion_is_fast_for_many_boxes():
+	import time
+	rng = np.random.default_rng(3)
+	corners = rng.uniform(0, 900, size=(200, 2))
+	boxes = np.concatenate([corners, corners + rng.uniform(20, 100, size=(200, 2))], axis=1)
+	start = time.perf_counter()
+	box_occlusion_scores(boxes)
+	assert time.perf_counter() - start < 2.0
+
+
+def test_occlusion_many_boxes_in_small_area_is_fast():
+	import time
+	rng = np.random.default_rng(4)
+	corners = rng.uniform(0, 250, size=(1000, 2))
+	boxes = np.concatenate([corners, corners + rng.uniform(10, 50, size=(1000, 2))], axis=1)
+	start = time.perf_counter()
+	box_occlusion_scores(boxes)
+	assert time.perf_counter() - start < 2.0
+
+
+def test_occlusion_matches_raster_check():
+	rng = np.random.default_rng(5)
+	for _ in range(50):
+		count = int(rng.integers(2, 7))
+		corners = rng.integers(0, 15, size=(count, 2))
+		boxes = np.concatenate([corners, corners + rng.integers(1, 10, size=(count, 2))], axis=1).astype(float)
+		expected = []
+		for number, box in enumerate(boxes):
+			grid = np.zeros((30, 30), dtype=bool)
+			for other_number, other in enumerate(boxes):
+				if other_number != number:
+					grid[int(other[0]):int(other[2]), int(other[1]):int(other[3])] = True
+			own = np.zeros((30, 30), dtype=bool)
+			own[int(box[0]):int(box[2]), int(box[1]):int(box[3])] = True
+			expected.append((grid & own).sum() / own.sum())
+		assert np.allclose(box_occlusion_scores(boxes), expected)
+
+
+def test_occlusion_zero_area_box_is_zero_without_nan():
+	boxes = np.array([[5, 5, 5, 5], [0, 0, 10, 10]], dtype=float)
+	scores = box_occlusion_scores(boxes)
+	assert scores[0] == 0.0 and not np.isnan(scores).any()
+	assert high_iou_pair_count(boxes, 0.5) == 0
+
+
+def test_occlusion_skipped_without_boxes():
+	table = make_box_table([(100, 100)], [[]], [[]], ["a"])
+	result = BoxOcclusionMetric().run(box_table=table)
+	assert result["skipped"] is True

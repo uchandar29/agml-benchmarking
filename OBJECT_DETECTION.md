@@ -25,6 +25,7 @@ Everything is under `metrics.<name>` in `report.json`. The report also has `task
 | 1 | `instance_class_imbalance` | Imbalance ratio and normalised entropy of box counts per class, on the training split |
 | 1 | `scale_variance` | Spread of box area inside each class (`exp(std of log area)`) |
 | 1 | `crowding` | Clark-Evans ratio of box centres per image. Below 1 means clustered, about 1 random, above 1 evenly spread |
+| 1 | `box_occlusion` | Box Occlusion Ratio (BOR): per box, the share of its area covered by the union of the other boxes in the image. Image score is the mean over its boxes (0 for images with fewer than two boxes). Also reports box pairs with IoU of 0.5 or more |
 | 1 | `co_occurrence` | Class pairs that appear together more than chance (lift above 2, at least 5 images). Skipped with one class |
 | 1 | `exact_duplicate` | Identical images and cross-split leakage |
 | 2 | `near_duplicate` | Near duplicate images with DINOv2 embeddings of whole images |

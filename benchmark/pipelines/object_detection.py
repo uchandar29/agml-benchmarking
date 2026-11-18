@@ -40,7 +40,7 @@ from core.embeddings import (
 )
 from core.metrics.annotation import LabelNoiseMetric, MissingAnnotationMetric
 from core.metrics.detection_scoring import score_detection_report
-from core.metrics.difficulty import CrowdingMetric, DatasetCartographyMetric, ScaleVarianceMetric
+from core.metrics.difficulty import BoxOcclusionMetric, CrowdingMetric, DatasetCartographyMetric, ScaleVarianceMetric
 from core.metrics.diversity import CoOccurrenceMetric, IntraClassDiversityMetric
 from core.metrics.structural import (
 	AspectRatioDistributionMetric,
@@ -205,6 +205,7 @@ class DetectionBenchmarkPipeline:
 				box_table=box_table, train_image_indices=splits.indices["train"])),
 			("scale_variance", lambda: ScaleVarianceMetric().run(box_table=box_table)),
 			("crowding", lambda: CrowdingMetric().run(box_table=box_table)),
+			("box_occlusion", lambda: BoxOcclusionMetric().run(box_table=box_table)),
 			("co_occurrence", lambda: CoOccurrenceMetric().run(box_table=box_table)),
 			("exact_duplicate", lambda: ExactDuplicateMetric().run(
 				full_dataset=splits.full, split_indices=index_sets, schema=schema)),

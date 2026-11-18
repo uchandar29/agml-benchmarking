@@ -22,6 +22,7 @@ CROSS_SPLIT_MAX_PENALTY = 2.0
 SMALL_SHARE_ZERO_AT = 50.0        # percent of small boxes that scores 0
 HARD_SHARE_ZERO_AT = 50.0         # percent of hard boxes that scores 0
 SPREAD_FACTOR_ZERO_AT = 3.0
+BOR_ZERO_AT = 0.5                 # mean image BOR that scores 0
 CROP_DIVERSITY_FULL_AT = 0.5
 NOISE_ZERO_AT = 0.10
 MISSING_ZERO_AT = 0.25
@@ -73,16 +74,28 @@ def _difficulty(report: Dict[str, Any], sub_scores: Dict[str, float]) -> Optiona
 	if size is None:
 		return None
 	crowding = _metric(report, "crowding")
+	occlusion = _metric(report, "box_occlusion")
 	scale = _metric(report, "scale_variance")
 	cartography = _metric(report, "dataset_cartography")
 
 	# Nothing to crowd or compare when these are skipped, so they count as easy
 	crowding_score = clamp(10 * crowding["mean_R"]) if crowding else 10.0
 	scale_score = clamp(10 * (1 - (scale["mean_spread_factor"] - 1) / (SPREAD_FACTOR_ZERO_AT - 1))) if scale else 10.0
+	occlusion_score = clamp(10 * (1 - occlusion["mean_image_bor"] / BOR_ZERO_AT)) if occlusion else 10.0
 	small_score = clamp(10 * (1 - size["coco"]["pct_small"] / SMALL_SHARE_ZERO_AT))
 
-	parts = {"crowding": (0.25, crowding_score), "small_objects": (0.25, small_score), "scale_spread": (0.20, scale_score)}
-	sub_scores.update({"crowding": crowding_score, "small_objects": small_score, "scale_spread": scale_score})
+	parts = {
+		"crowding": (0.25, crowding_score),
+		"box_occlusion": (0.25, occlusion_score),
+		"small_objects": (0.25, small_score),
+		"scale_spread": (0.20, scale_score),
+	}
+	sub_scores.update({
+		"crowding": crowding_score,
+		"box_occlusion": occlusion_score,
+		"small_objects": small_score,
+		"scale_spread": scale_score,
+	})
 	if cartography:
 		hard_score = clamp(10 * (1 - cartography["pct_hard"] / HARD_SHARE_ZERO_AT))
 		parts["cartography"] = (0.30, hard_score)

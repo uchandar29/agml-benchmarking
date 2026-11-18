@@ -34,7 +34,7 @@ def test_phases_1_to_3_write_report_with_scores(tmp_path, monkeypatch):
 	assert sum(info["split_sizes"].values()) == 30
 	for name in (
 		"box_count_distribution", "box_size_distribution", "aspect_ratio_distribution",
-		"instance_class_imbalance", "scale_variance", "crowding", "co_occurrence", "exact_duplicate",
+		"instance_class_imbalance", "scale_variance", "crowding", "box_occlusion", "co_occurrence", "exact_duplicate",
 		"near_duplicate", "crop_diversity", "label_noise", "dataset_cartography", "missing_annotation", "detector_eval",
 	):
 		assert name in report["metrics"], name
